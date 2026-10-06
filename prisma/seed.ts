@@ -28,55 +28,32 @@ async function main() {
   await prisma.user.deleteMany();
 
   // ─── Users ───────────────────────────────────────────────
-  console.log("Creating users...");
-  const hashedPassword = await bcrypt.hash("password123", 12);
+  // Exactly one login is seeded: the admin account, driven by env vars.
+  // No default/hardcoded credentials exist anywhere in this repo.
+  console.log("Creating admin user...");
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (!adminEmail || !adminPassword) {
+    throw new Error(
+      "ADMIN_EMAIL and ADMIN_PASSWORD must be set in .env before seeding. " +
+        "No default credentials are provided."
+    );
+  }
+  if (adminPassword.length < 12) {
+    throw new Error("ADMIN_PASSWORD must be at least 12 characters long.");
+  }
+  const hashedPassword = await bcrypt.hash(adminPassword, 12);
 
   const admin = await prisma.user.create({
     data: {
-      name: "Samuel Ibe",
-      email: "admin@farmops.com",
+      name: process.env.ADMIN_NAME?.trim() || "Samuel Ibe",
+      email: adminEmail,
       password: hashedPassword,
       role: "ADMIN",
     },
   });
 
-  const farmManager = await prisma.user.create({
-    data: {
-      name: "Kwame Asante",
-      email: "manager@farmops.com",
-      password: hashedPassword,
-      role: "FARM_MANAGER",
-    },
-  });
-
-  const warehouseManager = await prisma.user.create({
-    data: {
-      name: "Ama Mensah",
-      email: "warehouse@farmops.com",
-      password: hashedPassword,
-      role: "WAREHOUSE_MANAGER",
-    },
-  });
-
-  const fieldWorker = await prisma.user.create({
-    data: {
-      name: "Kofi Boateng",
-      email: "worker@farmops.com",
-      password: hashedPassword,
-      role: "FIELD_WORKER",
-    },
-  });
-
-  const accountant = await prisma.user.create({
-    data: {
-      name: "Akua Darko",
-      email: "accountant@farmops.com",
-      password: hashedPassword,
-      role: "ACCOUNTANT",
-    },
-  });
-
-  console.log("  ✅ 5 users created");
+  console.log("  ✅ 1 admin user created");
 
   // ─── Farms ───────────────────────────────────────────────
   console.log("Creating farms...");
@@ -608,7 +585,7 @@ async function main() {
       unitCost: 150,
       totalValue: 7500,
       reason: "Monthly restock from AgroChem",
-      performedById: warehouseManager.id,
+      performedById: admin.id,
       farmId: kumasiFarm.id,
     },
     {
@@ -619,7 +596,7 @@ async function main() {
       unitCost: 150,
       totalValue: 1500,
       reason: "Top dressing — Rice Farm A",
-      performedById: warehouseManager.id,
+      performedById: admin.id,
       farmId: kumasiFarm.id,
     },
     {
@@ -630,7 +607,7 @@ async function main() {
       unitCost: 150,
       totalValue: 9000,
       reason: "Restock for rice season",
-      performedById: warehouseManager.id,
+      performedById: admin.id,
       farmId: tamaleFarm.id,
     },
     {
@@ -642,7 +619,7 @@ async function main() {
       unitCost: 150,
       totalValue: 1500,
       reason: "Inter-farm transfer for planting",
-      performedById: farmManager.id,
+      performedById: admin.id,
       farmId: kumasiFarm.id,
     },
     {
@@ -653,7 +630,7 @@ async function main() {
       unitCost: 300,
       totalValue: 1500,
       reason: "Spillage during handling",
-      performedById: warehouseManager.id,
+      performedById: admin.id,
       farmId: kumasiFarm.id,
     },
     {
@@ -664,7 +641,7 @@ async function main() {
       unitCost: 50,
       totalValue: 5000,
       reason: "Weekly feed delivery",
-      performedById: warehouseManager.id,
+      performedById: admin.id,
       farmId: sunyaniFarm.id,
     },
     {
@@ -675,7 +652,7 @@ async function main() {
       unitCost: 5,
       totalValue: 3000,
       reason: "Tractor operations — this week",
-      performedById: warehouseManager.id,
+      performedById: admin.id,
       farmId: kumasiFarm.id,
     },
     {
@@ -686,7 +663,7 @@ async function main() {
       unitCost: 180,
       totalValue: 7200,
       reason: "Urea restock",
-      performedById: warehouseManager.id,
+      performedById: admin.id,
       farmId: kumasiFarm.id,
     },
   ];
@@ -703,7 +680,7 @@ async function main() {
   await prisma.resourceRequest.create({
     data: {
       requestNumber: "REQ-0826-0001",
-      requestedById: fieldWorker.id,
+      requestedById: admin.id,
       farmId: tamaleFarm.id,
       warehouseId: tamaleMain.id,
       itemId: npk.id,
@@ -718,7 +695,7 @@ async function main() {
   await prisma.resourceRequest.create({
     data: {
       requestNumber: "REQ-0826-0002",
-      requestedById: fieldWorker.id,
+      requestedById: admin.id,
       farmId: kumasiFarm.id,
       warehouseId: kumasiChemical.id,
       itemId: pesticideDT.id,
@@ -727,7 +704,7 @@ async function main() {
       purpose: "Cocoa pest control — Block 3",
       priority: "HIGH",
       status: "APPROVED",
-      reviewedById: farmManager.id,
+      reviewedById: admin.id,
       reviewedAt: new Date("2026-08-31T09:00:00"),
     },
   });
@@ -735,7 +712,7 @@ async function main() {
   await prisma.resourceRequest.create({
     data: {
       requestNumber: "REQ-0826-0003",
-      requestedById: fieldWorker.id,
+      requestedById: admin.id,
       farmId: sunyaniFarm.id,
       warehouseId: sunyaniMain.id,
       itemId: maizeSeeds.id,
@@ -744,7 +721,7 @@ async function main() {
       purpose: "New planting — Block 7",
       priority: "MEDIUM",
       status: "FULFILLED",
-      reviewedById: farmManager.id,
+      reviewedById: admin.id,
       reviewedAt: new Date("2026-08-28T15:00:00"),
       fulfilledAt: new Date("2026-08-29T10:00:00"),
     },
@@ -753,7 +730,7 @@ async function main() {
   await prisma.resourceRequest.create({
     data: {
       requestNumber: "REQ-0826-0004",
-      requestedById: fieldWorker.id,
+      requestedById: admin.id,
       farmId: tamaleFarm.id,
       itemId: diesel.id,
       quantity: 200,
@@ -761,7 +738,7 @@ async function main() {
       purpose: "Tractor operations — this week",
       priority: "MEDIUM",
       status: "REJECTED",
-      reviewedById: farmManager.id,
+      reviewedById: admin.id,
       reviewNote: "Fuel allocation already scheduled for this week",
       reviewedAt: new Date("2026-08-28T08:30:00"),
     },
@@ -770,7 +747,7 @@ async function main() {
   await prisma.resourceRequest.create({
     data: {
       requestNumber: "REQ-0826-0005",
-      requestedById: fieldWorker.id,
+      requestedById: admin.id,
       farmId: sunyaniFarm.id,
       warehouseId: sunyaniMain.id,
       itemId: animalFeed.id,
@@ -789,7 +766,7 @@ async function main() {
 
   const notifData = [
     {
-      userId: warehouseManager.id,
+      userId: admin.id,
       type: "LOW_STOCK" as const,
       title: "Low Stock Alert: NPK 15-15-15",
       message: "NPK stock at Kumasi Main is at 30 bags (min: 50).",
@@ -797,7 +774,7 @@ async function main() {
       entityId: npk.id,
     },
     {
-      userId: warehouseManager.id,
+      userId: admin.id,
       type: "EXPIRING" as const,
       title: "Expiry Warning: Pesticide DT105",
       message: "Batch DT105-0826-001 expires Dec 31, 2025. Use first.",
@@ -805,14 +782,14 @@ async function main() {
       entityId: dtBatch1.id,
     },
     {
-      userId: farmManager.id,
+      userId: admin.id,
       type: "REQUEST_PENDING" as const,
       title: "New Request: REQ-0826-0001",
       message: "Kofi Boateng requested 10 bags NPK (Urgent).",
       entity: "ResourceRequest",
     },
     {
-      userId: fieldWorker.id,
+      userId: admin.id,
       type: "REQUEST_APPROVED" as const,
       title: "Request Approved: REQ-0826-0002",
       message: "Your request for Pesticide DT105 has been approved.",
@@ -882,7 +859,7 @@ async function main() {
       orderNumber: "PO-0826-0002",
       supplierId: northernSeeds.id,
       farmId: tamaleFarm.id,
-      createdById: farmManager.id,
+      createdById: admin.id,
       status: "SHIPPED",
       totalAmount: 8800,
       expectedDeliveryDate: new Date("2026-09-05"),
@@ -902,7 +879,7 @@ async function main() {
       orderNumber: "PO-0826-0003",
       supplierId: fuelMaster.id,
       farmId: kumasiFarm.id,
-      createdById: warehouseManager.id,
+      createdById: admin.id,
       status: "CONFIRMED",
       totalAmount: 15000,
       expectedDeliveryDate: new Date("2026-09-10"),
@@ -943,7 +920,7 @@ async function main() {
       quantity: 5,
       wasteType: "DAMAGED",
       reason: "Spillage during transport from storage to field",
-      reportedById: warehouseManager.id,
+      reportedById: admin.id,
       farmId: kumasiFarm.id,
       estimatedValue: 1500,
     },
@@ -955,7 +932,7 @@ async function main() {
       quantity: 2,
       wasteType: "EXPIRED",
       reason: "Seeds expired before planting season",
-      reportedById: warehouseManager.id,
+      reportedById: admin.id,
       farmId: sunyaniFarm.id,
       estimatedValue: 50,
     },
@@ -967,7 +944,7 @@ async function main() {
       quantity: 5,
       wasteType: "SPOILED",
       reason: "Feed spoiled due to moisture in storage",
-      reportedById: warehouseManager.id,
+      reportedById: admin.id,
       farmId: sunyaniFarm.id,
       estimatedValue: 250,
     },
@@ -981,7 +958,7 @@ async function main() {
   await prisma.stockCount.create({
     data: {
       warehouseId: kumasiMain.id,
-      countedById: warehouseManager.id,
+      countedById: admin.id,
       status: "COMPLETED",
       notes: "Monthly physical count — August 2026",
       items: {
@@ -999,7 +976,7 @@ async function main() {
   await prisma.stockCount.create({
     data: {
       warehouseId: sunyaniMain.id,
-      countedById: warehouseManager.id,
+      countedById: admin.id,
       status: "COMPLETED",
       notes: "Monthly physical count — Sunyani",
       items: {
@@ -1019,15 +996,14 @@ async function main() {
 
   const auditData = [
     { userId: admin.id, action: "CREATE", entity: "InventoryItem", entityId: npk.id, newValues: { name: "NPK 15-15-15" } },
-    { userId: warehouseManager.id, action: "CREATE", entity: "InventoryBatch", entityId: npkBatch1.id, newValues: { batchNumber: "NPK-0826-001", quantity: 50 } },
-    { userId: warehouseManager.id, action: "CREATE", entity: "StockTransaction", entityId: npkBatch1.id, newValues: { type: "RECEIVED", quantity: 50 } },
-    { userId: farmManager.id, action: "UPDATE", entity: "ResourceRequest", entityId: "req-002", oldValues: { status: "PENDING" }, newValues: { status: "APPROVED" } },
-    { userId: warehouseManager.id, action: "UPDATE", entity: "InventoryBatch", entityId: dtBatch1.id, oldValues: { quantityRemaining: 17 }, newValues: { quantityRemaining: 12 } },
+    { userId: admin.id, action: "CREATE", entity: "InventoryBatch", entityId: npkBatch1.id, newValues: { batchNumber: "NPK-0826-001", quantity: 50 } },
+    { userId: admin.id, action: "CREATE", entity: "StockTransaction", entityId: npkBatch1.id, newValues: { type: "RECEIVED", quantity: 50 } },
+    { userId: admin.id, action: "UPDATE", entity: "ResourceRequest", entityId: "req-002", oldValues: { status: "PENDING" }, newValues: { status: "APPROVED" } },
+    { userId: admin.id, action: "UPDATE", entity: "InventoryBatch", entityId: dtBatch1.id, oldValues: { quantityRemaining: 17 }, newValues: { quantityRemaining: 12 } },
     { userId: admin.id, action: "CREATE", entity: "PurchaseOrder", entityId: po1.id, newValues: { orderNumber: "PO-0826-0001" } },
-    { userId: warehouseManager.id, action: "UPDATE", entity: "StockCount", entityId: "sc-001", newValues: { status: "COMPLETED" } },
-    { userId: admin.id, action: "CREATE", entity: "User", entityId: accountant.id, newValues: { name: "Akua Darko", role: "ACCOUNTANT" } },
-    { userId: fieldWorker.id, action: "CREATE", entity: "ResourceRequest", entityId: "req-005", newValues: { requestNumber: "REQ-0826-0005" } },
-    { userId: warehouseManager.id, action: "UPDATE", entity: "PurchaseOrder", entityId: po1.id, oldValues: { status: "SHIPPED" }, newValues: { status: "RECEIVED" } },
+    { userId: admin.id, action: "UPDATE", entity: "StockCount", entityId: "sc-001", newValues: { status: "COMPLETED" } },
+    { userId: admin.id, action: "CREATE", entity: "ResourceRequest", entityId: "req-005", newValues: { requestNumber: "REQ-0826-0005" } },
+    { userId: admin.id, action: "UPDATE", entity: "PurchaseOrder", entityId: po1.id, oldValues: { status: "SHIPPED" }, newValues: { status: "RECEIVED" } },
   ];
 
   for (const log of auditData) {
@@ -1037,12 +1013,8 @@ async function main() {
   console.log("  ✅ 10 audit logs created");
 
   console.log("\n🎉 Seed completed successfully!\n");
-  console.log("Login credentials:");
-  console.log("  Admin:       admin@farmops.com / password123");
-  console.log("  Manager:     manager@farmops.com / password123");
-  console.log("  Warehouse:   warehouse@farmops.com / password123");
-  console.log("  Worker:      worker@farmops.com / password123");
-  console.log("  Accountant:  accountant@farmops.com / password123");
+  console.log("Login:");
+  console.log(`  Admin: ${adminEmail} (password from ADMIN_PASSWORD in .env)`);
 }
 
 main()
