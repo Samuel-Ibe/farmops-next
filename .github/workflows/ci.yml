@@ -82,10 +82,6 @@ jobs:
           DB_TEST_DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
         run: pnpm vitest run --reporter=verbose
 
-      - name: Test Summary
-        if: always()
-        run: echo "Tests completed with exit code: $?"
-
   # ─── Build ──────────────────────────────────────────
   build:
     name: Build
