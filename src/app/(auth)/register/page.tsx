@@ -73,35 +73,20 @@ export default function RegisterPage() {
         return;
       }
 
-      setSuccess("Account created successfully! Signing in...");
+      // The account is created dormant, so an auto sign-in would bounce off
+      // `authorize()` and land on /login with no explanation. Take them to
+      // the code form instead, carrying the dev-only code when there is no
+      // SMTP to deliver it (never present outside local development).
+      const devCode = typeof data.devCode === "string" ? data.devCode : undefined;
+      setSuccess(
+        devCode
+          ? `Account created. No SMTP configured in this environment — your code is ${devCode}.`
+          : "Account created. Check your email for your 6-digit verification code."
+      );
 
-      // Auto sign-in using the same direct callback approach
-      try {
-        const csrfRes = await fetch("/api/auth/csrf");
-        const { csrfToken } = await csrfRes.json();
-
-        const body = new URLSearchParams({
-          email: form.email,
-          password: form.password,
-          csrfToken,
-          callbackUrl: "/dashboard",
-          json: "true",
-        });
-
-        const authRes = await fetch("/api/auth/callback/credentials", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body,
-          redirect: "manual",
-        });
-
-        // Redirect to dashboard on success
-        window.location.href = "/dashboard";
-      } catch {
-        // Auto sign-in failed, redirect to login page
-        setSuccess("Account created! Redirecting to login...");
-        setTimeout(() => router.push("/login"), 1500);
-      }
+      const next = `/verify-email?email=${encodeURIComponent(form.email)}`;
+      const target = devCode ? `${next}&code=${encodeURIComponent(devCode)}` : next;
+      setTimeout(() => router.push(target), devCode ? 3000 : 1500);
     } catch (err) {
       setError("An error occurred. Please try again.");
     } finally {

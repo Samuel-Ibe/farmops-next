@@ -153,6 +153,41 @@ export function poStatusEmail(orderNumber: string, status: string, supplierName:
   return { subject, html, text: `PO ${orderNumber} is now ${status}. Supplier: ${supplierName}. Total: GH₵${totalAmount}` };
 }
 
+export function verificationEmail(name: string, code: string, verifyUrl: string) {
+  const subject = "Verify your FarmOps email";
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background: #16a34a; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+        <h1 style="margin: 0; font-size: 20px;">🌾 FarmOps — Verify your email</h1>
+      </div>
+      <div style="padding: 20px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+        <p style="font-size: 16px; color: #374151;">
+          Hi ${name}, enter this code to activate your account:
+        </p>
+        <p style="font-family: monospace; font-size: 32px; letter-spacing: 8px; font-weight: bold; color: #166534; text-align: center; background: #f0fdf4; padding: 16px; border-radius: 8px;">
+          ${code}
+        </p>
+        <p style="color: #6b7280; font-size: 14px;">
+          Valid for 15 minutes. If the button doesn't work, open:
+          <br /><a href="${verifyUrl}">${verifyUrl}</a>
+        </p>
+        <a href="${verifyUrl}"
+           style="display: inline-block; background: #16a34a; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+          Verify my email
+        </a>
+        <p style="color: #9ca3af; font-size: 12px; margin-top: 16px;">
+          You can't sign in until this is done. If you didn't create a FarmOps account, ignore this email.
+        </p>
+      </div>
+    </div>
+  `;
+  return {
+    subject,
+    html,
+    text: `Your FarmOps verification code is ${code}. It expires in 15 minutes. Or open ${verifyUrl}`,
+  };
+}
+
 export function requestStatusEmail(
   requestNumber: string,
   itemName: string,

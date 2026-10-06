@@ -100,6 +100,14 @@ export default function LoginForm({ callbackUrl = "/dashboard", authError }: Log
             {loading ? "Signing in..." : "Sign in"}
           </Button>
 
+          <p className="text-center text-xs text-muted-foreground">
+            Just signed up? You need to{" "}
+            <Link href="/verify-email" className="text-green-600 hover:underline">
+              verify your email
+            </Link>{" "}
+            before you can sign in.
+          </p>
+
           <p className="text-center text-sm text-muted-foreground">
             Don&apos;t have an account?{" "}
             <Link href="/register" className="text-green-600 hover:underline">

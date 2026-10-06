@@ -58,7 +58,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           where: { email: normalizedEmail },
         });
 
-        // Deliberately non-specific: never reveal whether an account exists
+        // Deliberately non-specific: never reveal whether an account exists.
+        // `isActive` also covers an account still awaiting email verification
+        // — registration creates it with the flag off, so a fresh sign-up
+        // cannot obtain a session until it has proven the mailbox. See
+        // src/lib/email-verification.ts.
         if (!user || !user.isActive) {
           recordLoginFailure(failKey);
           return null;
