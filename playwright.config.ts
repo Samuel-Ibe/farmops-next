@@ -29,12 +29,17 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
+  // Provision E2E accounts/tenant data before any spec runs — on a fresh
+  // database (every CI run) api.spec's login would otherwise find no users.
+  globalSetup: "./tests/e2e/global-setup.ts",
   webServer: process.env.CI
     ? undefined
     : {
         command: "npx next dev -p 3000",
         url: "http://localhost:3000",
         reuseExistingServer: true,
-        timeout: 60000,
+        // Cold dev boot plus first-route compile on a loaded machine can
+        // exceed the 60s default.
+        timeout: 120_000,
       },
 });
