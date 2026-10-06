@@ -1,42 +1,45 @@
-# ─── Stage 1: Dependencies ─────────────────────────────
+# ─── Stage 1: Dependencies (pnpm only, frozen lockfile) ───────────────
 FROM node:20-alpine AS deps
 WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
-RUN corepack enable pnpm && pnpm install --frozen-lockfile
+# package.json pins pnpm via "packageManager", so corepack always uses the
+# same pnpm version locally, in CI and in this image.
+RUN corepack enable pnpm
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# The root postinstall runs `prisma generate`, so the schema must exist
+# before install (this was missing and broke the image build).
+COPY prisma/schema.prisma prisma/schema.prisma
+RUN pnpm install --frozen-lockfile
 
-# ─── Stage 2: Build ───────────────────────────────────
+# ─── Stage 2: Build ───────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 WORKDIR /app
+RUN corepack enable pnpm
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN pnpm exec prisma generate
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN pnpm build
 
-# Generate Prisma client
-RUN npx prisma generate
-
-# Build Next.js
-ENV NEXT_TELEMETRY_DISABLED 1
-RUN npm run build
-
-# ─── Stage 3: Production ──────────────────────────────
+# ─── Stage 3: Production runtime ──────────────────────────────────────
 FROM node:20-alpine AS runner
 WORKDIR /app
 
-ENV NODE_ENV production
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3000 \
+    HOSTNAME="0.0.0.0"
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN addgroup --system --gid 1001 nodejs \
+    && adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+# Full application tree (Next.js server + Prisma client and query engine).
+# The previous revision copied a `.next/standalone` folder that this project
+# never produces (no `output: "standalone"`), so the image could not start —
+# the CI Docker smoke test now catches that class of failure.
+COPY --from=builder --chown=nextjs:nodejs /app ./
 
 USER nextjs
 
 EXPOSE 3000
-ENV PORT 3000
-ENV HOSTNAME "0.0.0.0"
 
-CMD ["node", "server.js"]
+CMD ["node", "node_modules/next/dist/bin/next", "start"]

@@ -33,6 +33,12 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# local run logs (dev server + docker build)
+dev-server.log
+dev-server.err.log
+docker-build.log
+docker-build.err
+
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
@@ -41,7 +47,8 @@ yarn-error.log*
 .vercel
 
 # prisma
-prisma/migrations/
+# NOTE: prisma/migrations is version-controlled (roadmap Phase 3 — versioned
+# schema evolution). Only generated client output is ignored.
 
 # typescript
 *.tsbuildinfo

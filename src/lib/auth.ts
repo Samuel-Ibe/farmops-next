@@ -24,6 +24,13 @@ async function requestIp(): Promise<string> {
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  // Self-hosted deployment: Auth.js only defaults `trustHost` to true in
+  // dev (NODE_ENV !== "production") or on Vercel/CF Pages, so every
+  // /api/auth/* route returned 500 (UntrustedHost) under `next start` and in
+  // the production Docker image. The app is served from one origin (behind a
+  // proxy), so trusting the request host here is correct; per-request origin
+  // validation for CSRF still applies inside Auth.js.
+  trustHost: true,
   providers: [
     Credentials({
       name: "credentials",

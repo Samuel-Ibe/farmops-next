@@ -1,0 +1,16 @@
+# Keep the build context minimal and reproducible (roadmap Phase 3):
+# never bake local dependencies, secrets or build output into the image.
+node_modules
+.next
+.git
+.github
+.env
+.env.*
+!.env.example
+coverage
+playwright-report
+test-results
+.freebuff
+dev-server.log
+tsconfig.tsbuildinfo
+*.log
