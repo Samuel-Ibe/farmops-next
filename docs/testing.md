@@ -7,33 +7,41 @@
 ## 1. Commands
 
 ```bash
-npm test                 # unit suite (Vitest), single run
-npm run test:watch       # watch mode
-npm run test:coverage    # unit + V8 coverage report (text/json/html)
-npm run test:e2e         # Playwright end-to-end (needs dev server)
-npm run test:e2e:ui      # Playwright UI mode
-npm run test:all         # vitest && playwright
+pnpm test                 # unit suite (Vitest), single run
+pnpm run test:watch       # watch mode
+pnpm run test:coverage    # unit + V8 coverage report (text/json/html)
+pnpm run test:db          # real-PostgreSQL suite (needs DB_TEST_DATABASE_URL)
+pnpm run test:e2e         # Playwright end-to-end (starts a dev server locally)
+pnpm run test:e2e:ui      # Playwright UI mode
+pnpm run test:all         # vitest && playwright
 ```
 
-CI runs `tsc --noEmit` → `npm test` → `npm audit --audit-level=critical`.
+The repository is **pnpm-only** (`packageManager` in `package.json`, one
+lockfile). CI runs `pnpm install --frozen-lockfile` → `tsc --noEmit` →
+`vitest run` (with a PostgreSQL service: unit **and** real-DB suites) →
+`next build` → Playwright e2e → Docker build + runtime smoke test.
 
 ## 2. Current numbers (measured, not aspirational)
 
 | Metric | Value | How it's measured |
 |---|---|---|
-| Unit tests | **138 passing** across 12 files | `npm test` |
-| Type coverage | **91.3%** (32,519 / 35,628) | `npx type-coverage` |
+| Unit tests | **176 passing** across 15 files (169 pure unit + 7 real-PostgreSQL; the DB 7 self-skip without `DB_TEST_DATABASE_URL`) | `pnpm test` |
+| E2E tests | **35 passing** (13 tenant-isolation adversarial, 17 API contract, 5 auth/UI) | `pnpm run test:e2e` |
+| Type coverage | **93.01%** (40,775 / 43,838) | `npx type-coverage` |
 | TypeScript | `strict: true`, 0 errors | `npx tsc --noEmit` |
-| Branch coverage (tested lib modules) | **91.2%** | `npm run test:coverage` |
-| Statement coverage across `src/lib` | **16.2%** | coverage include is `src/lib/**` only |
+| Branch coverage across `src/lib` | **92.5%** | `pnpm run test:coverage` |
+| Statement coverage across `src/lib` | **27.5%** | coverage include is `src/lib/**` only |
 
-That last row is the honest one: our tests cover the **lib layer's tested
-modules** well (`utils` 94%, `api-keys` 100%, `email` 76%) while whole
-modules go untested (`api-auth`, `validations`, `audit`, `notifications`,
-`auth`). Route handlers and pages have **no unit coverage at all** — they're
-exercised manually and by the e2e suite. Closing this gap is roadmap P0/P2:
-the guard/scope functions in `api-auth.ts` are the highest-value targets
-because they *are* the security boundary.
+That last row is the honest one: the tested lib modules are covered well
+(`tenant`, `rate-limit`, `security-headers`, `file-signatures`,
+`email-verification` and `stock` are 95–100%) while whole modules go
+untested (`api-auth`, `validations`, `audit`, `notifications`, `auth`).
+Route handlers and pages still have almost no *unit* coverage — only the
+two auth verification routes. The load-bearing authorization behavior is
+instead proven at the HTTP boundary by the tenant-isolation e2e suite and
+at the database boundary by the concurrency suite. Closing the remaining
+gap is roadmap Phase 4/5: the guard/scope functions in `api-auth.ts` are
+the highest-value targets because they *are* the security boundary.
 
 ## 3. What we test today
 
@@ -47,29 +55,52 @@ because they *are* the security boundary.
 | `api-keys.test.ts` (8) | create/validate/revoke lifecycle |
 | `pagination.test.ts` (8) | cursor/limit parsing, response envelope |
 
-**`tests/e2e/` — Playwright against a running dev server:**
+**`tests/security/` — adversarial & security-regression units:**
 
-- `api.spec.ts` — smoke-calls major endpoints for status/shape.
-- Auth flow: register → login → dashboard.
+| File | Covers |
+|---|---|
+| `tenant-isolation.test.ts` (14) | `resolveFarmScope`, role hierarchy, warehouse scope — the pure tenant boundary |
+| `stock-race.test.ts` (12) | atomic conditional-UPDATE stock logic (in-memory contract) |
+| `email-verification*.ts` (31) | code hashing/expiry/attempts + the three auth route contracts |
+| `login-throttle.test.ts`, `security-headers.test.ts`, `file-signatures.test.ts`, `idempotency.test.ts`, `api-key-scopes.test.ts` | first-round hardening regressions |
 
-**Deliberately excluded from unit tests:** anything needing a live database.
-Prisma against a testcontainer DB is the right long-term answer; it isn't
-wired up yet (see §6).
+**`tests/db/` — real PostgreSQL (gated):**
+
+| File | Covers |
+|---|---|
+| `stock-concurrency.test.ts` (7) | concurrent 80/100 deductions → one winner & final 20, 20-way storm, mid-transaction rollback, CHECK-constraint enforcement. Skipped unless `DB_TEST_DATABASE_URL` points at a disposable migrated database — it never falls back to `DATABASE_URL`. |
+
+**`tests/e2e/` — Playwright against a running server:**
+
+- `tenant-isolation.spec.ts` (13) — Farm A attacks Farm B through real
+  authenticated HTTP: list/read/export/write/transfer/split/delete paths,
+  `farmId` query injection, unassigned and role-restricted users, admin
+  positive control, concurrent duplicate `Idempotency-Key`.
+- `api.spec.ts` (17) — anonymous 401 contract on protected endpoints +
+  authenticated response shapes (CSRF, 405s, external-key 401).
+- `auth.spec.ts` (5) — login/register/protected-route UI behavior.
+
+Fixtures (`tests/e2e/tenant-fixtures.ts`) create two idempotent tenants
+(`E2E-A`/`E2E-B` markers) and sign in through the real NextAuth callback.
+
+**Deliberately excluded from unit tests:** anything needing a live database
+*except* the gated `tests/db/` suite, which exists precisely for that.
 
 ## 4. What we should test next (priority order)
 
-1. **`resolveFarmScope` — 4 cases.** admin+requested → requested;
-   admin+none → null; member+farm → farm; member+no-farm → `NO_FARM_MATCH`.
-   This function is the tenant boundary; it deserves a test file of its own.
-2. **Guard chain:** `checkCsrf` (safe methods, matching/mismatched origin),
-   `checkRateLimit` window rollover, `hasMinRole` hierarchy edges.
-3. **Zod schemas:** unknown keys stripped (especially that `role` can't
+1. **Guard chain units:** `checkCsrf` (safe methods, matching/mismatched
+   origin) and `hasMinRole` hierarchy edges — `api-auth.ts` still shows 0%
+   statement coverage.
+2. **Zod schemas:** unknown keys stripped (especially that `role` can't
    arrive through `createUserSchema`).
-4. **Reset-token logic:** digest match, 1-hour expiry, single-use invalidation.
-5. **Export scoping:** CSV row sets differ per farm scope.
-6. **Adversarial e2e:** two tenants, replay every GET with the other's ids,
-   expect 404/empty (the single highest-value manual test —
-   [security/tenant-isolation.md](./security/tenant-isolation.md) §6.4).
+3. **Password-reset token logic:** digest match, expiry, single-use
+   invalidation (email *verification* tokens are covered; reset tokens
+   are not).
+4. **Route-handler unit tests** beyond the two auth verification routes,
+   starting with the highest-risk inventory/transaction handlers.
+
+Already done from the old list: `resolveFarmScope` cases, adversarial
+multi-tenant e2e, export scoping (proven in e2e), login throttling.
 
 ## 5. Writing tests
 
@@ -83,20 +114,25 @@ wired up yet (see §6).
 
 ## 6. Known tooling notes
 
-**`--legacy-peer-deps` is required** — `next-auth@5.0.0-beta` peers on
-`nodemailer ^7||^8`, we pin `^10` (security patches). npm's strict resolver
-rejects the tree. Consequences:
+**One package manager, one lockfile (roadmap Phase 3).** `package.json`
+pins `packageManager: pnpm@…`; Corepack (`corepack enable`) picks it up
+automatically. `package-lock.json` was removed on purpose — do not commit
+one back. CI and the Docker build both use `pnpm install --frozen-lockfile`,
+so a `package.json` dependency change must be followed by a lockfile update
+(`pnpm install --lockfile-only`).
 
-- Use `npm ci --legacy-peer-deps` in CI and `npm install --legacy-peer-deps`
-  locally. A plain `npm install` fails with `ERESOLVE`.
-- `npm audit fix` fails for the same reason. To patch a dep:
-  `npm update <pkg> --legacy-peer-deps --package-lock-only`.
+**Real-PostgreSQL suite:** set `DB_TEST_DATABASE_URL` to a **disposable**
+database with `prisma migrate deploy` applied (e.g. a `*_e2e` database),
+never your working one. Without it the 7 DB tests skip with a warning.
 
 **Coverage provider pinning:** `@vitest/coverage-v8` must match the Vitest
-major (currently 3.2.7) or the run dies with
-`BaseCoverageProvider` export errors. It's pinned in `devDependencies`.
+major (currently 3.x) or the run dies with `BaseCoverageProvider` export
+errors. It's pinned in `devDependencies`.
 
-**Playwright** needs browsers once per machine: `npx playwright install`.
+**Playwright** needs browsers once per machine: `npx playwright install`
+(ffmpeg too, for video-on-failure). If the browser download is blocked,
+`PW_CHANNEL=chrome` runs the suite against an installed Chrome instead.
+The tenant fixtures need `DATABASE_URL` (exported, or present in `.env`).
 
 **Coverage config** (`vitest.config.ts`): `include: ["src/lib/**/*.ts"]`,
 excluding `prisma.ts`. Widening it to `src/app/api/**` will crater the
@@ -108,7 +144,7 @@ means something when it changes.
 A change is done when:
 
 - [ ] `npx tsc --noEmit` is clean
-- [ ] `npm test` is green (and new behavior has tests where §4 says it should)
-- [ ] e2e passes if auth, navigation, or a major flow changed
+- [ ] `pnpm test` is green (and new behavior has tests where §4 says it should)
+- [ ] e2e passes if auth, tenancy, navigation, or a major flow changed
 - [ ] Security-sensitive changes ticked the checklist in
       [contributing.md](./contributing.md)

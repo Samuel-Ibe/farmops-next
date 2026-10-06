@@ -14,24 +14,28 @@ Measured on `master`, not estimated:
 
 | Metric | Value | Tool |
 |---|---|---|
-| Type coverage | **92.5%** (37,041 / 40,034) | `type-coverage` |
+| Type coverage | **93.01%** (40,775 / 43,838) | `type-coverage` |
 | TypeScript | `strict: true`, **0 errors** | `tsc --noEmit` |
-| Unit tests | **138 passing** (12 suites — incl. 62 adversarial security/atomicity tests) | Vitest |
-| Branch coverage, tested lib modules | **91.2%** | `vitest --coverage` |
-| Critical vulnerabilities, production deps | **0** | `npm audit --omit=dev` |
-| High vulnerabilities, production deps | **0** (2 moderate accepted — see [security.md](docs/security.md)) | `npm audit --omit=dev` |
-| Authenticated API routes | **45/49 guarded** — 4 are intentionally public auth endpoints | route sweep |
-| Tenant isolation | **100% of data routes** scoped server-side from the session | `resolveFarmScope` |
+| Unit tests | **176 passing** (15 suites — incl. 93 adversarial security tests and 7 real-PostgreSQL concurrency/rollback/invariant tests) | Vitest |
+| E2E tests | **35 passing** — 13 route-level tenant-isolation attack scenarios, 17 API contract checks, 5 auth/UI | Playwright |
+| Branch coverage, `src/lib` | **92.5%** | `vitest --coverage` |
+| Critical vulnerabilities, production deps | **0** | `pnpm audit --prod` |
+| High vulnerabilities, production deps | **0** (2 moderate accepted — see [security.md](docs/security.md)) | `pnpm audit --prod` |
+| Authenticated API routes | **45/51 guarded** — 6 are intentionally public auth endpoints | route sweep |
+| Tenant isolation | **100% of data routes** scoped server-side from the session, **proven through real HTTP** by the Farm A/B attack suite | `resolveFarmScope` + `tests/e2e/tenant-isolation.spec.ts` |
 | Ownership checks | **100% of per-ID mutations** (scoped lookup → 404, never 403) | audit |
-| Stock mutations | **atomic** — conditional updates inside DB transactions; lost race → 409 | `src/lib/stock.ts` + race tests |
-| Idempotency | `Idempotency-Key` on transactions, transfer, split, approvals, PO submission | `src/lib/idempotency.ts` |
+| Stock mutations | **atomic** — conditional updates inside DB transactions; lost race → 409; DB `CHECK (quantityRemaining >= 0)` rejects negative stock; verified against real PostgreSQL | `src/lib/stock.ts` + `tests/db/` |
+| Idempotency | `Idempotency-Key` on transactions, transfer, split, approvals, PO submission — incl. a concurrent duplicate-key E2E test | `src/lib/idempotency.ts` |
 | API keys | stored **SHA-256 hashed**, scope-enforced per route | `src/lib/api-keys.ts` |
 | Login throttling | 5 failed attempts / IP+account / 15 min, no lockout DoS | `src/lib/rate-limit.ts` |
+| Email verification | **required on sign-up** — 6-digit code, 15-min TTL, 8 guesses/account, HMAC-stored | `src/lib/email-verification.ts` |
 | Security headers | CSP + HSTS + frame/nosniff policy on every response | `src/middleware.ts` |
+| Schema management | versioned Prisma migrations (`prisma/migrations/`, baseline + invariants) deployed in CI — not `db push` | `prisma migrate deploy` |
+| Docker | image **builds and boots in CI** with a runtime smoke test (health/DB/auth) | `.github/workflows/ci.yml` |
 | Health endpoint | `GET /api/health` (DB probe, 200/503) | deployment checks |
 | Raw SQL / `dangerouslySetInnerHTML` | **0 / 0** | grep |
 
-Honest gaps (they're tracked, not hidden): statement coverage across `src/lib` is 16% — tests cover the tested modules well but whole modules are untested; route handlers have no unit coverage (the Farm A/B HTTP matrix is the next E2E target). See [docs/testing.md](docs/testing.md) §2. The full hardening status — including deferred items like distributed rate limiting and the DTO/`any` sweep — is mapped recommendation-by-recommendation in [docs/PRODUCTION_ELEVATION.md](docs/PRODUCTION_ELEVATION.md).
+Honest gaps (they're tracked, not hidden): statement coverage across `src/lib` is 27.5% — the tested modules are covered well, but whole modules (`api-auth`, `validations`, `audit`, `auth`) still have no unit tests; route handlers are covered at the HTTP boundary (tenant E2E) rather than by handler-level unit tests. See [docs/testing.md](docs/testing.md) §2. The full hardening status — including deferred items like distributed rate limiting and the DTO/`any` sweep — is mapped recommendation-by-recommendation in [docs/PRODUCTION_ELEVATION.md](docs/PRODUCTION_ELEVATION.md); the next engineering phases live in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ---
 
@@ -59,19 +63,21 @@ Honest gaps (they're tracked, not hidden): statement coverage across `src/lib` i
 
 ```bash
 git clone <repo> && cd farmops
-npm install --legacy-peer-deps     # see note below
+corepack enable              # activates the pnpm pinned in package.json
+pnpm install --frozen-lockfile
 cp .env.example .env               # set DATABASE_URL + NEXTAUTH_SECRET
-npx prisma db push
+npx prisma migrate deploy          # versioned migrations (baseline + invariants)
 npm run db:seed
-npm run dev
+pnpm dev
 ```
 
 Open http://localhost:3000.
 
-**Why `--legacy-peer-deps`:** `next-auth@5.0.0-beta` declares a peer on
-`nodemailer ^7||^8` while we run `^10` (security patches require it). npm's
-strict resolver refuses the combination. This affects CI too — see
-[docs/contributing.md](docs/contributing.md).
+**One package manager, one lockfile:** the repo is pnpm-only
+(`packageManager` field + `pnpm-lock.yaml`; `package-lock.json` is
+intentionally absent). npm peer-dep conflicts (`next-auth@5` vs
+`nodemailer@10`) that once required `--legacy-peer-deps` are a non-issue
+under pnpm. See [docs/contributing.md](docs/contributing.md).
 
 ### Docker
 
@@ -79,17 +85,20 @@ strict resolver refuses the combination. This affects CI too — see
 docker compose up -d   # PostgreSQL + app + MailHog (email UI: :8025)
 ```
 
-### Seeded logins
+### Seeded login
 
-| Role | Email | Password |
-|---|---|---|
-| Admin | `admin@farmops.com` | `password123` |
-| Farm Manager | `manager@farmops.com` | `password123` |
-| Warehouse Manager | `warehouse@farmops.com` | `password123` |
-| Field Worker | `worker@farmops.com` | `password123` |
+The seed creates **exactly one account**: your admin. Credentials come from
+`.env` — nothing is hardcoded, and the seed refuses to run if they're unset:
 
-> ⚠️ Seed credentials are development-only. Production registration assigns
-> `FIELD_WORKER` server-side and never accepts a role from the client.
+```bash
+ADMIN_EMAIL="admin@farmops.com"   # your login email
+ADMIN_PASSWORD="<strong password>" # min 12 chars; never commit this
+ADMIN_NAME="Samuel Ibe"            # optional
+```
+
+No other accounts exist until you create them in-app (or via `POST
+/api/auth/register`, which assigns `FIELD_WORKER` server-side and never
+accepts a role from the client).
 
 ---
 
@@ -112,7 +121,7 @@ docker compose up -d   # PostgreSQL + app + MailHog (email UI: :8025)
 
 ## Architecture
 
-A **modular monolith**: one Next.js app, one Postgres, 49 route handlers. Boundaries are code-level (bounded contexts), not network hops.
+A **modular monolith**: one Next.js app, one Postgres, 53 route handlers. Boundaries are code-level (bounded contexts), not network hops.
 
 ```
 Browser → middleware (cookie presence, UX only)
@@ -145,6 +154,8 @@ Full shape, seams, and debts: **[docs/architecture.md](docs/architecture.md)**
 | [PRODUCT_REDESIGN.md](docs/PRODUCT_REDESIGN.md) | identity, DDD, UX redesign, scores, roadmap |
 | [testing.md](docs/testing.md) | commands, coverage reality, what to test next |
 | [deployment.md](docs/deployment.md) | env, migrations, checklist, scaling triggers |
+| [operations.md](docs/operations.md) | failure diagnosis runbook: auth, database, stock operations |
+| [ROADMAP.md](docs/ROADMAP.md) | next-phase engineering roadmap + phase status |
 | [contributing.md](docs/contributing.md) | setup, PR rules, security checklist |
 | [adr/](docs/adr/) | ADR-001 auth · ADR-002 tenancy · ADR-003 ORM · ADR-004 storage |
 
@@ -187,6 +198,8 @@ Documented decisions, not accidents — the full list lives in the ADRs.
 
 Prioritized plan from 4/10 → 8.5/10 across product, security, architecture,
 and UX: **[docs/PRODUCT_REDESIGN.md](docs/PRODUCT_REDESIGN.md)** Part VIII.
+The current *engineering* hardening plan (phases, acceptance criteria,
+status) is **[docs/ROADMAP.md](docs/ROADMAP.md)**.
 
 | Phase | Focus |
 |---|---|
