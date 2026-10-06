@@ -1,12 +1,19 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { mutationGuard, requireAuth } from "@/lib/api-auth";
+import { mutationGuard, requireAuth, resolveFarmScope } from "@/lib/api-auth";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const user = await requireAuth();
     if (user instanceof NextResponse) return user;
+    // Tenant scope comes from the session only — never from the query string
+    // (regression guard: this route previously returned every farm's seasons).
+    const { searchParams } = new URL(request.url);
+    const farmScope = resolveFarmScope(user, searchParams.get("farmId"));
     const seasons = await prisma.season.findMany({
+      where: {
+        ...(farmScope && { farmId: farmScope }),
+      },
       include: {
         farm: true,
         plans: {

@@ -11,7 +11,8 @@ test.describe("Authentication", () => {
 
   test("shows register page", async ({ page }) => {
     await page.goto("/register");
-    await expect(page.locator("text=Create Account")).toBeVisible();
+    // Heading specifically — the submit button carries the same label.
+    await expect(page.getByRole("heading", { name: "Create Account" })).toBeVisible();
   });
 
   test("redirects to login when accessing protected routes", async ({ page }) => {

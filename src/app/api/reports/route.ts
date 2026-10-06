@@ -13,27 +13,36 @@ export async function GET(request: Request) {
     const endDate = searchParams.get("endDate");
     const farmId = resolveFarmScope(user, searchParams.get("farmId"));
 
+    // Session-derived tenant scope, shared by every branch below: non-admins
+    // are pinned to their own farm (NO_FARM_MATCH when unassigned), only
+    // admins see cross-farm aggregates. Regression guard: the dashboard,
+    // supplier and valuation reports previously ignored this scope and
+    // disclosed cross-farm totals and rows to any authenticated user.
+    const farmFilter = farmId ? { farmId } : {};
+    const warehouseFarmFilter = farmId ? { warehouse: { farmId } } : {};
+
     const txDateFilter: any = {};
     if (startDate) txDateFilter.gte = new Date(startDate);
     if (endDate) txDateFilter.lte = new Date(endDate + "T23:59:59");
     const hasDateFilter = Object.keys(txDateFilter).length > 0;
 
     if (type === "dashboard") {
+      const batchWhere = { status: "ACTIVE" as const, ...warehouseFarmFilter };
       const [totalItems, totalBatches, farms, warehouses, pendingRequests] = await Promise.all([
         prisma.inventoryItem.count({ where: { isActive: true } }),
-        prisma.inventoryBatch.count({ where: { status: "ACTIVE" } }),
-        prisma.farm.count({ where: { isActive: true } }),
-        prisma.warehouse.count({ where: { isActive: true } }),
-        prisma.resourceRequest.count({ where: { status: "PENDING" } }),
+        prisma.inventoryBatch.count({ where: batchWhere }),
+        prisma.farm.count({ where: { isActive: true, ...(farmId ? { id: farmId } : {}) } }),
+        prisma.warehouse.count({ where: { isActive: true, ...(farmId ? { farmId } : {}) } }),
+        prisma.resourceRequest.count({ where: { status: "PENDING", ...farmFilter } }),
       ]);
-      const batches = await prisma.inventoryBatch.findMany({ where: { status: "ACTIVE" }, select: { purchasePrice: true, quantityRemaining: true } });
+      const batches = await prisma.inventoryBatch.findMany({ where: batchWhere, select: { purchasePrice: true, quantityRemaining: true } });
       const totalValue = batches.reduce((s, b) => s + Number(b.purchasePrice) * b.quantityRemaining, 0);
-      const items = await prisma.inventoryItem.findMany({ where: { isActive: true }, include: { batches: { where: { status: "ACTIVE" }, select: { quantityRemaining: true } } } });
-      const lowStockCount = items.filter((i) => i.batches.reduce((s, b) => s + b.quantityRemaining, 0) <= i.minimumStockLevel).length;
+      const items = await prisma.inventoryItem.findMany({ where: { isActive: true }, include: { batches: { where: batchWhere, select: { quantityRemaining: true } } } });
+      const lowStockCount = items.filter((i) => i.minimumStockLevel > 0 && i.batches.reduce((s, b) => s + b.quantityRemaining, 0) <= i.minimumStockLevel).length;
       const thirtyDays = new Date(); thirtyDays.setDate(thirtyDays.getDate() + 30);
-      const expiringCount = await prisma.inventoryBatch.count({ where: { status: "ACTIVE", expiryDate: { not: null, lte: thirtyDays } } });
-      const recentTransactions = await prisma.stockTransaction.findMany({ take: 10, include: { batch: { include: { item: true } }, performedBy: { select: { name: true, role: true } } }, orderBy: { createdAt: "desc" } });
-      const categories = await prisma.category.findMany({ include: { items: { include: { batches: { where: { status: "ACTIVE" }, select: { purchasePrice: true, quantityRemaining: true } } } } } });
+      const expiringCount = await prisma.inventoryBatch.count({ where: { ...batchWhere, expiryDate: { not: null, lte: thirtyDays } } });
+      const recentTransactions = await prisma.stockTransaction.findMany({ where: farmFilter, take: 10, include: { batch: { include: { item: true } }, performedBy: { select: { name: true, role: true } } }, orderBy: { createdAt: "desc" } });
+      const categories = await prisma.category.findMany({ include: { items: { include: { batches: { where: batchWhere, select: { purchasePrice: true, quantityRemaining: true } } } } } });
       const inventoryValueByCategory = categories.map((c) => ({ name: c.name, color: c.color || "#6b7280", value: c.items.reduce((s, i) => s + i.batches.reduce((bs, b) => bs + Number(b.purchasePrice) * b.quantityRemaining, 0), 0) })).filter((c) => c.value > 0);
       return cachedJsonResponse({ totalItems, totalBatches, totalValue, lowStockCount, expiringCount, pendingRequestCount: pendingRequests, totalFarms: farms, totalWarehouses: warehouses, recentTransactions, inventoryValueByCategory }, 15);
     }
@@ -81,7 +90,7 @@ export async function GET(request: Request) {
     }
 
     if (type === "suppliers") {
-      const suppliers = await prisma.supplier.findMany({ where: { isActive: true }, include: { purchaseOrders: { include: { items: true }, orderBy: { createdAt: "desc" } }, batches: { orderBy: { createdAt: "desc" } } } });
+      const suppliers = await prisma.supplier.findMany({ where: { isActive: true }, include: { purchaseOrders: { where: farmFilter, include: { items: true }, orderBy: { createdAt: "desc" } }, batches: { where: warehouseFarmFilter, orderBy: { createdAt: "desc" } } } });
       const performance = suppliers.map((s) => {
         const orders = s.purchaseOrders; const totalOrders = orders.length; const totalValue = orders.reduce((sum, o) => sum + Number(o.totalAmount), 0);
         const delivered = orders.filter((o) => o.status === "RECEIVED"); const onTime = delivered.filter((o) => !o.expectedDeliveryDate || !o.actualDeliveryDate || new Date(o.actualDeliveryDate) <= new Date(o.expectedDeliveryDate));
@@ -93,7 +102,7 @@ export async function GET(request: Request) {
     }
 
     if (type === "valuation") {
-      const categories = await prisma.category.findMany({ include: { items: { include: { batches: { where: { status: "ACTIVE" }, select: { purchasePrice: true, quantityRemaining: true } } } } } });
+      const categories = await prisma.category.findMany({ include: { items: { include: { batches: { where: { status: "ACTIVE", ...warehouseFarmFilter }, select: { purchasePrice: true, quantityRemaining: true } } } } } });
       const valuation = categories.map((c) => ({ name: c.name, color: c.color, value: c.items.reduce((s, i) => s + i.batches.reduce((bs, b) => bs + Number(b.purchasePrice) * b.quantityRemaining, 0), 0), items: c.items.reduce((s, i) => s + i.batches.reduce((bs, b) => bs + b.quantityRemaining, 0), 0) }));
       const grandTotal = valuation.reduce((s, v) => s + v.value, 0);
       return cachedJsonResponse({ totalValue: grandTotal, categories: valuation.map((v) => ({ ...v, percentage: grandTotal > 0 ? (v.value / grandTotal) * 100 : 0 })) }, 30);

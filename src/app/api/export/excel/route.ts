@@ -8,7 +8,7 @@ import { requireAuth, resolveFarmScope } from "@/lib/api-auth";
  * Export data as Excel (.xlsx) file.
  *
  * Query params:
- *   type: "inventory" | "transactions" | "batches" | "waste" | "purchase-orders" | "all"
+ *   type: "inventory" | "transactions" | "batches" | "waste" | "all"
  *   startDate: ISO date string
  *   endDate: ISO date string
  *   warehouseId: filter by warehouse
