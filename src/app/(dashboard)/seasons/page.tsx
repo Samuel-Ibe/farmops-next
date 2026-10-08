@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import type { Prisma } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,28 +14,46 @@ import {
   Plus, Calendar, Loader2, Sun, Cloud, Pencil, Trash2,
 } from "lucide-react";
 
+type SeasonWithRelations = Prisma.SeasonGetPayload<{
+  include: { farm: true; plans: { include: { item: true } } };
+}>;
+
 export default function SeasonsPage() {
-  const [seasons, setSeasons] = useState<any[]>([]);
+  const [seasons, setSeasons] = useState<SeasonWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
-  const [editSeason, setEditSeason] = useState<any>(null);
-  const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [editSeason, setEditSeason] = useState<SeasonWithRelations | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SeasonWithRelations | null>(null);
   const { toast } = useToast();
 
   const fetchSeasons = useCallback(async () => {
+    const res = await fetch("/api/seasons");
+    if (!res.ok) throw new Error("Failed to fetch seasons");
+    const data: SeasonWithRelations[] = await res.json();
+    return data;
+  }, []);
+
+  // Event-handler refresh (shows the spinner); the initial load in the
+  // effect below stays outside this fn so setState is never reached
+  // synchronously from the effect body.
+  const reloadSeasons = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/seasons");
-      if (res.ok) setSeasons(await res.json());
+      setSeasons(await fetchSeasons());
     } catch (err) {
       console.error("Failed to fetch seasons:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchSeasons]);
 
-  useEffect(() => { fetchSeasons(); }, [fetchSeasons]);
+  useEffect(() => {
+    fetchSeasons()
+      .then(setSeasons)
+      .catch((err) => console.error("Failed to fetch seasons:", err))
+      .finally(() => setLoading(false));
+  }, [fetchSeasons]);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -42,7 +61,7 @@ export default function SeasonsPage() {
     if (res.ok) {
       toast("Season deleted", "success");
       setDeleteTarget(null);
-      fetchSeasons();
+      reloadSeasons();
     } else {
       const err = await res.json();
       toast(err.error || "Failed to delete", "error");
@@ -139,7 +158,7 @@ export default function SeasonsPage() {
         open={showForm}
         onOpenChange={setShowForm}
         initialData={editSeason}
-        onSuccess={() => { setShowForm(false); setEditSeason(null); fetchSeasons(); }}
+        onSuccess={() => { setShowForm(false); setEditSeason(null); reloadSeasons(); }}
       />
 
       <ConfirmDialog

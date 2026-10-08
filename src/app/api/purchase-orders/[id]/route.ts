@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { mutationGuard, writeAuditLog } from "@/lib/api-auth";
 
@@ -24,7 +25,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Purchase order belongs to another farm" }, { status: 403 });
     }
 
-    const updateData: any = {};
+    const updateData: Prisma.PurchaseOrderUpdateInput = {};
     if (status) updateData.status = status;
     if (notes !== undefined) updateData.notes = notes;
     if (actualDeliveryDate) updateData.actualDeliveryDate = new Date(actualDeliveryDate);

@@ -5,29 +5,33 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/page-header";
 import { SearchInput } from "@/components/shared/search-input";
-import { formatCurrency } from "@/lib/utils";
+import type { Prisma } from "@prisma/client";
 import { ScrollText, Loader2 } from "lucide-react";
 
+type AuditLogWithUser = Prisma.AuditLogGetPayload<{
+  include: { user: { select: { name: true; email: true; role: true } } };
+}>;
+
 export default function AuditLogPage() {
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<AuditLogWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  const fetchLogs = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/audit-log");
-      if (res.ok) setLogs(await res.json());
-    } catch (err) {
-      console.error("Failed to fetch audit logs:", err);
-    } finally {
-      setLoading(false);
-    }
+  // Data-only loader (no setState): the effect below never reaches setState
+  // synchronously (react-hooks/set-state-in-effect).
+  const loadLogs = useCallback(async () => {
+    const res = await fetch("/api/audit-log");
+    if (!res.ok) throw new Error("Failed to fetch audit logs");
+    const data: AuditLogWithUser[] = await res.json();
+    return data;
   }, []);
 
   useEffect(() => {
-    fetchLogs();
-  }, []);
+    loadLogs()
+      .then(setLogs)
+      .catch((err) => console.error("Failed to fetch audit logs:", err))
+      .finally(() => setLoading(false));
+  }, [loadLogs]);
 
   const filtered = logs.filter(
     (log) =>
@@ -87,7 +91,7 @@ export default function AuditLogPage() {
                       <Badge variant="outline" className={getActionColor(log.action)}>
                         {log.action}
                       </Badge>
-                      <Badge variant="outline">{log.entityType}</Badge>
+                      <Badge variant="outline">{log.entity}</Badge>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">                      By: {log.user?.name || "System"} • Entity: {log.entity} {" "}
                       {log.entityId && `• ID: ${log.entityId.slice(0, 8)}...`}

@@ -11,45 +11,68 @@ import { Label } from "@/components/ui/label";
 import { FormSelect } from "@/components/ui/form-select";
 import { useToast } from "@/components/ui/toast";
 import { Loader2 } from "lucide-react";
+import type { Farm } from "@prisma/client";
+
+interface SeasonFormValues {
+  id?: string;
+  name?: string | null;
+  farmId?: string | null;
+  startDate?: Date | string | null;
+  endDate?: Date | string | null;
+  cropType?: string | null;
+  status?: string | null;
+}
 
 interface SeasonFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initialData?: any;
+  initialData?: SeasonFormValues | null;
   onSuccess: () => void;
+}
+
+function buildSeasonForm(initialData?: SeasonFormValues | null) {
+  return {
+    name: initialData?.name || "",
+    farmId: initialData?.farmId || "",
+    startDate: initialData?.startDate
+      ? new Date(initialData.startDate).toISOString().split("T")[0]
+      : "",
+    endDate: initialData?.endDate
+      ? new Date(initialData.endDate).toISOString().split("T")[0]
+      : "",
+    cropType: initialData?.cropType || "",
+    status: initialData?.status || "PLANNING",
+  };
 }
 
 export function SeasonForm({ open, onOpenChange, initialData, onSuccess }: SeasonFormProps) {
   const [loading, setLoading] = useState(false);
-  const [farms, setFarms] = useState<any[]>([]);
+  const [farms, setFarms] = useState<Farm[]>([]);
   const { toast } = useToast();
 
-  const [form, setForm] = useState({
-    name: "",
-    farmId: "",
-    startDate: "",
-    endDate: "",
-    cropType: "",
-    status: "PLANNING",
-  });
+  const [form, setForm] = useState(() => buildSeasonForm(initialData));
 
   useEffect(() => {
     if (open) {
-      fetch("/api/farms").then((r) => r.json()).then(setFarms).catch(() => {});
-      if (initialData) {
-        setForm({
-          name: initialData.name || "",
-          farmId: initialData.farmId || "",
-          startDate: initialData.startDate ? new Date(initialData.startDate).toISOString().split("T")[0] : "",
-          endDate: initialData.endDate ? new Date(initialData.endDate).toISOString().split("T")[0] : "",
-          cropType: initialData.cropType || "",
-          status: initialData.status || "PLANNING",
-        });
-      } else {
-        setForm({ name: "", farmId: "", startDate: "", endDate: "", cropType: "", status: "PLANNING" });
-      }
+      fetch("/api/farms").then((r) => r.json()).then((data: Farm[]) => setFarms(data)).catch(() => {});
     }
-  }, [open, initialData]);
+  }, [open]);
+
+  // Reset the form when the dialog opens or the edit target changes — state
+  // is adjusted during render instead of in an effect
+  // (react-hooks/set-state-in-effect).
+  const [prevProps, setPrevProps] = useState<{
+    initialData: SeasonFormValues | null | undefined;
+    open: boolean;
+  } | null>(null);
+  if (
+    prevProps === null ||
+    prevProps.initialData !== initialData ||
+    prevProps.open !== open
+  ) {
+    setPrevProps({ initialData, open });
+    setForm(buildSeasonForm(initialData));
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
-import { PWAInstallPrompt } from "@/components/shared/pwa-install-prompt";
 
 export default function DashboardLayout({
   children,

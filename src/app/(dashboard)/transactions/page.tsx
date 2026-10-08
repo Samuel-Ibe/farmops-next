@@ -10,20 +10,29 @@ import { TransactionForm } from "@/components/forms/transaction-form";
 import { formatCurrency } from "@/lib/utils";
 import { CsvIO } from "@/components/shared/csv-io";
 import {
-  Plus,
   ArrowDown,
   ArrowUp,
   ArrowRightLeft,
   AlertTriangle,
   Loader2,
-  Filter,
   FileDown,
 } from "lucide-react";
+import type { Prisma } from "@prisma/client";
+
+type TransactionWithRelations = Prisma.StockTransactionGetPayload<{
+  include: {
+    batch: { include: { item: true } };
+    fromWarehouse: true;
+    toWarehouse: true;
+    performedBy: { select: { name: true; role: true } };
+    farm: true;
+  };
+}>;
 
 const TX_TYPES = ["RECEIVED", "ISSUED", "TRANSFERRED", "ADJUSTED", "RETURNED", "WASTED"];
 
 export default function TransactionsPage() {
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<TransactionWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -31,29 +40,44 @@ export default function TransactionsPage() {
   const [formType, setFormType] = useState("RECEIVED");
   const [showCsvIO, setShowCsvIO] = useState(false);
 
+  // Data-only loader (no setState): the effect below never reaches setState
+  // synchronously (react-hooks/set-state-in-effect).
+  const loadTransactions = useCallback(async (type: string) => {
+    const params = new URLSearchParams();
+    if (type) params.set("type", type);
+    const res = await fetch(`/api/transactions?${params}`);
+    if (!res.ok) throw new Error("Failed to fetch transactions");
+    const json = await res.json();
+    const data: TransactionWithRelations[] = Array.isArray(json)
+      ? json
+      : json?.data || [];
+    return data;
+  }, []);
+
+  // Event-handler refresh (shows the spinner; honours the type filter).
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (typeFilter) params.set("type", typeFilter);
-      const res = await fetch(`/api/transactions?${params}`);
-      if (res.ok) { const json = await res.json(); setTransactions(Array.isArray(json) ? json : json?.data || []); }
+      setTransactions(await loadTransactions(typeFilter));
     } catch (err) {
       console.error("Failed to fetch transactions:", err);
     } finally {
       setLoading(false);
     }
-  }, [typeFilter]);
+  }, [loadTransactions, typeFilter]);
 
   useEffect(() => {
-    fetchTransactions();
-  }, []);
+    loadTransactions("")
+      .then(setTransactions)
+      .catch((err) => console.error("Failed to fetch transactions:", err))
+      .finally(() => setLoading(false));
+  }, [loadTransactions]);
 
   const safeTransactions = Array.isArray(transactions) ? transactions : [];
   const filtered = safeTransactions.filter(
     (tx) =>
       tx.batch?.item?.name?.toLowerCase().includes(search.toLowerCase()) ||
-      tx.batchNumber?.toLowerCase().includes(search.toLowerCase())
+      tx.batch?.batchNumber?.toLowerCase().includes(search.toLowerCase())
   );
 
   const getTypeIcon = (type: string) => {
@@ -185,7 +209,7 @@ export default function TransactionsPage() {
                     )}
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium">{formatCurrency(tx.totalValue || 0)}</p>
+                    <p className="text-sm font-medium">{formatCurrency(Number(tx.totalValue || 0))}</p>
                     <p className="text-xs text-muted-foreground">
                       {new Date(tx.createdAt).toLocaleDateString()}
                     </p>

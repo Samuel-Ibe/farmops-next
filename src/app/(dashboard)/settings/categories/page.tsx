@@ -15,8 +15,12 @@ import {
   Pencil,
   Trash2,
   X,
-  Check,
 } from "lucide-react";
+import type { Prisma } from "@prisma/client";
+
+type CategoryWithCounts = Prisma.CategoryGetPayload<{
+  include: { _count: { select: { items: true } } };
+}>;
 
 const COLORS = [
   "#16a34a", "#ca8a04", "#dc2626", "#2563eb", "#7c3aed",
@@ -27,11 +31,11 @@ const COLORS = [
 const ICONS = ["🌱", "🧪", "🐛", "🌿", "🐄", "⛽", "🔧", "📦", "🌾", "💊", "💧", "🏗️"];
 
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState<any[]>([]);
+  const [categories, setCategories] = useState<CategoryWithCounts[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editCategory, setEditCategory] = useState<any>(null);
+  const [editCategory, setEditCategory] = useState<CategoryWithCounts | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CategoryWithCounts | null>(null);
   const [formName, setFormName] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [formColor, setFormColor] = useState(COLORS[0]);
@@ -39,21 +43,33 @@ export default function CategoriesPage() {
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
+  // Data-only loader (no setState): the effect below never reaches setState
+  // synchronously (react-hooks/set-state-in-effect).
+  const loadCategories = useCallback(async () => {
+    const res = await fetch("/api/categories");
+    if (!res.ok) throw new Error("Failed to fetch categories");
+    const data: CategoryWithCounts[] = await res.json();
+    return data;
+  }, []);
+
+  // Event-handler refresh (shows the spinner).
   const fetchCategories = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/categories");
-      if (res.ok) setCategories(await res.json());
+      setCategories(await loadCategories());
     } catch (err) {
       console.error("Failed to fetch categories:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadCategories]);
 
   useEffect(() => {
-    fetchCategories();
-  }, [fetchCategories]);
+    loadCategories()
+      .then(setCategories)
+      .catch((err) => console.error("Failed to fetch categories:", err))
+      .finally(() => setLoading(false));
+  }, [loadCategories]);
 
   const openNew = () => {
     setEditCategory(null);
@@ -64,7 +80,7 @@ export default function CategoriesPage() {
     setShowForm(true);
   };
 
-  const openEdit = (cat: any) => {
+  const openEdit = (cat: CategoryWithCounts) => {
     setEditCategory(cat);
     setFormName(cat.name);
     setFormDescription(cat.description || "");

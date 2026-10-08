@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,8 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/page-header";
 import { FormField } from "@/components/ui/form-field";
 import { useToast } from "@/components/ui/toast";
+import { useHydrated } from "@/hooks/use-hydrated";
 import {
-  Settings,
   User,
   Bell,
   Shield,
@@ -31,9 +31,8 @@ const ROLE_LABELS: Record<string, string> = {
 
 export default function SettingsPage() {
   const { data: session } = useSession();
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => setHydrated(true), []);
-  const userRole = (session?.user as any)?.role || "FIELD_WORKER";
+  const hydrated = useHydrated();
+  const userRole = session?.user?.role || "FIELD_WORKER";
   const isAdmin = hydrated && userRole === "ADMIN";
 
   const [profile, setProfile] = useState({

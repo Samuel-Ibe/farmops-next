@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Sprout, ArrowLeft, Lock, CheckCircle, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Suspense } from "react";
 
 function ResetPasswordForm() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token") || "";
 
@@ -79,7 +80,7 @@ function ResetPasswordForm() {
 
       setSuccess(true);
       setTimeout(() => {
-        window.location.href = "/login";
+        router.push("/login");
       }, 3000);
     } catch {
       setError("Network error. Please try again.");

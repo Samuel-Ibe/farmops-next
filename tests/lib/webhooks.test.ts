@@ -10,8 +10,6 @@ import {
 } from "@/lib/webhooks";
 
 describe("Webhook Management", () => {
-  let webhookId: string;
-
   beforeEach(() => {
     // Clean up any previously registered webhooks
     const existing = listWebhooks();
@@ -20,7 +18,6 @@ describe("Webhook Management", () => {
 
   it("registers a new webhook", () => {
     const wh = registerWebhook("https://example.com/hook", ["inventory.created"]);
-    webhookId = wh.id;
     expect(wh.id).toBeTruthy();
     expect(wh.url).toBe("https://example.com/hook");
     expect(wh.events).toEqual(["inventory.created"]);
@@ -30,7 +27,6 @@ describe("Webhook Management", () => {
 
   it("lists registered webhooks", () => {
     const wh = registerWebhook("https://example.com/hook", ["*"]);
-    webhookId = wh.id;
     const list = listWebhooks();
     expect(list.length).toBeGreaterThanOrEqual(1);
     expect(list.some((w) => w.id === wh.id)).toBe(true);
@@ -38,7 +34,6 @@ describe("Webhook Management", () => {
 
   it("gets a webhook by id", () => {
     const wh = registerWebhook("https://example.com/hook", ["batch.created"]);
-    webhookId = wh.id;
     const found = getWebhook(wh.id);
     expect(found).toBeTruthy();
     expect(found?.url).toBe("https://example.com/hook");
@@ -46,7 +41,6 @@ describe("Webhook Management", () => {
 
   it("updates a webhook", () => {
     const wh = registerWebhook("https://example.com/hook", ["*"]);
-    webhookId = wh.id;
     const updated = updateWebhook(wh.id, {
       url: "https://new-url.com/hook",
       events: ["inventory.created", "batch.created"],
@@ -57,7 +51,6 @@ describe("Webhook Management", () => {
 
   it("toggles webhook active status", () => {
     const wh = registerWebhook("https://example.com/hook", ["*"]);
-    webhookId = wh.id;
     updateWebhook(wh.id, { isActive: false });
     const found = getWebhook(wh.id);
     expect(found?.isActive).toBe(false);

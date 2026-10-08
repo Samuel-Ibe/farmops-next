@@ -19,46 +19,60 @@ import {
   AlertTriangle,
   Clock,
   Loader2,
-  RefreshCw,
   Pencil,
   Trash2,
   FileDown,
-  FileUp,
   Scissors,
   ArrowRightLeft,
 } from "lucide-react";
+import type { Warehouse } from "@prisma/client";
+import type { InventoryItemWithTotals } from "@/app/api/inventory/route";
 import { isExpiringSoon } from "@/lib/utils";
 
+type BatchRow = InventoryItemWithTotals["batches"][number];
+type SplitOrTransferTarget = BatchRow & {
+  item: { name: string; unitOfMeasure: string };
+};
+
 export default function InventoryPage() {
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<InventoryItemWithTotals[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showAddItem, setShowAddItem] = useState(false);
   const [showAddBatch, setShowAddBatch] = useState(false);
-  const [editItem, setEditItem] = useState<any>(null);
-  const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [editItem, setEditItem] = useState<InventoryItemWithTotals | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<InventoryItemWithTotals | null>(null);
   const [showCsvIO, setShowCsvIO] = useState(false);
-  const [splitBatch, setSplitBatch] = useState<any>(null);
-  const [transferBatch, setTransferBatch] = useState<any>(null);
-  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [splitBatch, setSplitBatch] = useState<SplitOrTransferTarget | null>(null);
+  const [transferBatch, setTransferBatch] = useState<SplitOrTransferTarget | null>(null);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const { toast } = useToast();
 
+  // Data-only loader (no setState) so the effect below never reaches setState
+  // synchronously (react-hooks/set-state-in-effect).
+  const loadItems = useCallback(async (query: string) => {
+    const params = new URLSearchParams();
+    if (query) params.set("search", query);
+    const res = await fetch(`/api/inventory?${params}`);
+    if (!res.ok) throw new Error("Failed to fetch inventory");
+    const json = await res.json();
+    const data: InventoryItemWithTotals[] = Array.isArray(json)
+      ? json
+      : json?.data || [];
+    return data;
+  }, []);
+
+  // Event-handler refresh (shows the spinner).
   const fetchItems = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (search) params.set("search", search);
-      const res = await fetch(`/api/inventory?${params}`);
-      if (res.ok) {
-        const json = await res.json();
-        setItems(Array.isArray(json) ? json : json?.data || []);
-      }
+      setItems(await loadItems(search));
     } catch (err) {
       console.error("Failed to fetch inventory:", err);
     } finally {
       setLoading(false);
     }
-  }, [search]);
+  }, [loadItems, search]);
 
   // Fetch warehouses for transfer form
   useEffect(() => {
@@ -69,8 +83,11 @@ export default function InventoryPage() {
   }, []);
 
   useEffect(() => {
-    fetchItems();
-  }, []);
+    loadItems("")
+      .then(setItems)
+      .catch((err) => console.error("Failed to fetch inventory:", err))
+      .finally(() => setLoading(false));
+  }, [loadItems]);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -96,9 +113,6 @@ export default function InventoryPage() {
   const totalValue = safeItems.reduce((sum, item) => sum + (item.totalValue || 0), 0);
   const lowStockCount = safeItems.filter(
     (item) => (item.totalQuantity || 0) <= (item.minimumStockLevel || 0) && item.minimumStockLevel > 0
-  ).length;
-  const expiringCount = safeItems.filter((item) =>
-    item.batches?.some((b: any) => b.expiryDate && isExpiringSoon(b.expiryDate))
   ).length;
 
   return (
@@ -200,7 +214,7 @@ export default function InventoryPage() {
               {filteredItems.map((item) => {
                 const isLow = (item.totalQuantity || 0) <= (item.minimumStockLevel || 0) && item.minimumStockLevel > 0;
                 const hasExpiring = item.batches?.some(
-                  (b: any) => b.expiryDate && isExpiringSoon(b.expiryDate)
+                  (b) => b.expiryDate && isExpiringSoon(b.expiryDate)
                 );
 
                 return (
@@ -238,8 +252,8 @@ export default function InventoryPage() {
                         </div>
                         <p className="text-sm text-muted-foreground">
                           {item.batches?.length || 0} batch{(item.batches?.length || 0) !== 1 ? "es" : ""} across{" "}
-                          {new Set(item.batches?.map((b: any) => b.warehouse?.farm?.name) || []).size} farm
-                          {new Set(item.batches?.map((b: any) => b.warehouse?.farm?.name) || []).size !== 1 ? "s" : ""}
+                          {new Set(item.batches?.map((b) => b.warehouse?.farm?.name) || []).size} farm
+                          {new Set(item.batches?.map((b) => b.warehouse?.farm?.name) || []).size !== 1 ? "s" : ""}
                         </p>
                       </div>
                       <div className="flex items-center gap-4">
@@ -273,7 +287,7 @@ export default function InventoryPage() {
                     </div>
                     {item.batches?.length > 0 && (
                       <div className="mt-3 space-y-2">
-                        {item.batches.slice(0, 5).map((batch: any) => (
+                        {item.batches.slice(0, 5).map((batch) => (
                           <div
                             key={batch.id}
                             className="flex items-center justify-between gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-xs"
@@ -299,7 +313,12 @@ export default function InventoryPage() {
                                   variant="ghost"
                                   size="sm"
                                   className="h-6 px-2 text-[10px]"
-                                  onClick={() => setSplitBatch(batch)}
+                                  onClick={() =>
+                                    setSplitBatch({
+                                      ...batch,
+                                      item: { name: item.name, unitOfMeasure: item.unitOfMeasure },
+                                    })
+                                  }
                                 >
                                   <Scissors className="h-3 w-3 mr-1" />
                                   Split
@@ -308,7 +327,12 @@ export default function InventoryPage() {
                                   variant="ghost"
                                   size="sm"
                                   className="h-6 px-2 text-[10px]"
-                                  onClick={() => setTransferBatch(batch)}
+                                  onClick={() =>
+                                    setTransferBatch({
+                                      ...batch,
+                                      item: { name: item.name, unitOfMeasure: item.unitOfMeasure },
+                                    })
+                                  }
                                 >
                                   <ArrowRightLeft className="h-3 w-3 mr-1" />
                                   Transfer
@@ -356,7 +380,7 @@ export default function InventoryPage() {
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
         title="Delete Inventory Item"
-        description={`Are you sure you want to delete "${deleteTarget?.name}"? ${deleteTarget?.batches?.length > 0 ? "This item has active batches and will be deactivated instead." : "This action cannot be undone."}`}
+        description={`Are you sure you want to delete "${deleteTarget?.name}"? ${(deleteTarget?.batches?.length ?? 0) > 0 ? "This item has active batches and will be deactivated instead." : "This action cannot be undone."}`}
         onConfirm={handleDelete}
       />
 

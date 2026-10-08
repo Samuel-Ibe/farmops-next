@@ -10,31 +10,48 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { WarehouseForm } from "@/components/forms/warehouse-form";
 import { useToast } from "@/components/ui/toast";
 import { Plus, Warehouse, Package, MapPin, Loader2, Pencil, Trash2 } from "lucide-react";
+import type { Prisma } from "@prisma/client";
+
+type WarehouseWithCounts = Prisma.WarehouseGetPayload<{
+  include: { farm: true; _count: { select: { batches: true } } };
+}>;
 
 export default function WarehousesPage() {
-  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseWithCounts[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
-  const [editWarehouse, setEditWarehouse] = useState<any>(null);
-  const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [editWarehouse, setEditWarehouse] = useState<WarehouseWithCounts | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<WarehouseWithCounts | null>(null);
   const { toast } = useToast();
 
+  // Data-only loader (no setState): the effect below never reaches setState
+  // synchronously (react-hooks/set-state-in-effect).
+  const loadWarehouses = useCallback(async () => {
+    const res = await fetch("/api/warehouses");
+    if (!res.ok) throw new Error("Failed to fetch warehouses");
+    const data: WarehouseWithCounts[] = await res.json();
+    return data;
+  }, []);
+
+  // Event-handler refresh (shows the spinner).
   const fetchWarehouses = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/warehouses");
-      if (res.ok) setWarehouses(await res.json());
+      setWarehouses(await loadWarehouses());
     } catch (err) {
       console.error("Failed to fetch warehouses:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadWarehouses]);
 
   useEffect(() => {
-    fetchWarehouses();
-  }, []);
+    loadWarehouses()
+      .then(setWarehouses)
+      .catch((err) => console.error("Failed to fetch warehouses:", err))
+      .finally(() => setLoading(false));
+  }, [loadWarehouses]);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -146,8 +163,6 @@ export default function WarehousesPage() {
                     <Badge variant="outline" className={
                       warehouse.type === "COLD_STORAGE"
                         ? "bg-blue-50 text-blue-700"
-                        : warehouse.type === "SILO"
-                        ? "bg-purple-50 text-purple-700"
                         : ""
                     }>
                       {warehouse.type?.replace("_", " ").toLowerCase() || "physical"}
@@ -183,7 +198,7 @@ export default function WarehousesPage() {
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
         title="Delete Warehouse"
-        description={`Are you sure you want to delete "${deleteTarget?.name}"? ${deleteTarget?.batches?.length > 0 ? "This warehouse has inventory and will be deactivated." : "This action cannot be undone."}`}
+        description={`Are you sure you want to delete "${deleteTarget?.name}"? ${(deleteTarget?._count?.batches ?? 0) > 0 ? "This warehouse has inventory and will be deactivated." : "This action cannot be undone."}`}
         onConfirm={handleDelete}
       />
     </div>

@@ -1,8 +1,45 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useSyncExternalStore } from "react";
 
 type Theme = "light" | "dark";
+
+const STORAGE_KEY = "farmops-theme";
+
+// ─── External theme store ───────────────────────────────────────────
+// localStorage is the source of truth; React subscribes to it instead of
+// mirroring it with setState effects (react-hooks/set-state-in-effect).
+const listeners = new Set<() => void>();
+
+function readTheme(): Theme {
+  try {
+    return localStorage.getItem(STORAGE_KEY) === "dark" ? "dark" : "light";
+  } catch {
+    return "light";
+  }
+}
+
+function writeTheme(next: Theme): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, next);
+  } catch {
+    // Storage unavailable (private mode) — theme still applies for this tab.
+  }
+  listeners.forEach((listener) => listener());
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function getServerTheme(): Theme {
+  return "light";
+}
+
+// ─── Context ────────────────────────────────────────────────────────
 
 const ThemeContext = createContext<{
   theme: Theme;
@@ -14,27 +51,17 @@ export function useTheme() {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("light");
-  const [mounted, setMounted] = useState(false);
+  const theme = useSyncExternalStore(subscribe, readTheme, getServerTheme);
 
+  // Effect: sync the DOM (an external system) with React state — the one
+  // legitimate use of an effect.
   useEffect(() => {
-    setMounted(true);
-    const saved = localStorage.getItem("farmops-theme") as Theme;
-    if (saved) setTheme(saved);
-  }, []);
+    document.documentElement.classList.toggle("dark", theme === "dark");
+  }, [theme]);
 
-  useEffect(() => {
-    if (mounted) {
-      document.documentElement.classList.toggle("dark", theme === "dark");
-      localStorage.setItem("farmops-theme", theme);
-    }
-  }, [theme, mounted]);
-
-  const toggleTheme = () => setTheme((t) => (t === "light" ? "dark" : "light"));
-
-  if (!mounted) {
-    return <>{children}</>;
-  }
+  const toggleTheme = useCallback(() => {
+    writeTheme(theme === "light" ? "dark" : "light");
+  }, [theme]);
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>

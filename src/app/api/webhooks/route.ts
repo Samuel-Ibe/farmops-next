@@ -13,7 +13,7 @@ export async function GET() {
     const webhooks = listWebhooks();
     const events = Object.values(WEBHOOK_EVENTS);
     return NextResponse.json({ webhooks, availableEvents: events });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Failed to list webhooks" }, { status: 500 });
   }
 }
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
 
     const webhook = registerWebhook(url, events);
     return NextResponse.json(webhook, { status: 201 });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "Failed to register webhook" },
       { status: 500 }

@@ -17,12 +17,6 @@ jobs:
   lint:
     name: Lint & Type Check
     runs-on: ubuntu-latest
-    # TODO(roadmap Phase 4 – type safety): eslint baseline has pre-existing
-    # debt (~249 errors, mostly no-explicit-any in legacy routes/pages) tracked
-    # in docs/PRODUCTION_ELEVATION.md. Type Check below remains a hard gate;
-    # remove continue-on-error once the baseline is clean so lint can become a
-    # required gate (roadmap §12).
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 

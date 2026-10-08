@@ -1,4 +1,4 @@
-import { User as PrismaUser } from "@prisma/client";
+import { Prisma, User as PrismaUser } from "@prisma/client";
 
 // Extended user type with role
 export type User = PrismaUser;
@@ -34,7 +34,7 @@ export interface InventoryWithDetails {
     id: string;
     batchNumber: string;
     quantityRemaining: number;
-    purchasePrice: any;
+    purchasePrice: Prisma.Decimal;
     expiryDate: Date | null;
     status: string;
     warehouse: { id: string; name: string; farm: { id: string; name: string } };
@@ -66,7 +66,7 @@ export interface TransactionWithDetails {
 export interface ChartDataPoint {
   name: string;
   value: number;
-  [key: string]: any;
+  [key: string]: string | number;
 }
 
 // Notification

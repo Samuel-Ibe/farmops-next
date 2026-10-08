@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import {
   Dialog,
   DialogContent,
@@ -15,7 +14,6 @@ import {
   Warehouse,
   ArrowLeftRight,
   Truck,
-  FileText,
   ClipboardList,
   QrCode,
   CornerDownLeft,
@@ -29,6 +27,29 @@ interface SearchResult {
   href: string;
 }
 
+interface SearchableItem {
+  id: string;
+  name: string;
+  unitOfMeasure: string;
+  totalQuantity?: number;
+  category?: { name: string } | null;
+  batches?: { id: string; batchNumber: string; quantityRemaining: number }[];
+}
+
+interface SearchableSupplier {
+  id: string;
+  name: string;
+  contactPerson?: string | null;
+  email?: string | null;
+}
+
+/** Unwrap an array that may be nested under `data` (paginated responses). */
+function extractRows<T>(res: unknown): T[] {
+  if (Array.isArray(res)) return res as T[];
+  const nested = (res as { data?: unknown } | null)?.data;
+  return Array.isArray(nested) ? (nested as T[]) : [];
+}
+
 export function GlobalSearch() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -36,13 +57,37 @@ export function GlobalSearch() {
   const [loading, setLoading] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const pathname = usePathname();
+
+  // Reset search state whenever the dialog (re)opens — handled in the event
+  // handlers rather than an effect so no setState runs synchronously in one
+  // (react-hooks/set-state-in-effect).
+  const resetSearch = () => {
+    setQuery("");
+    setResults([]);
+    setSelectedIndex(0);
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    if (next) resetSearch();
+    setOpen(next);
+  };
+
+  // Focus input when dialog opens (focus only — no setState in this effect).
+  useEffect(() => {
+    if (open) {
+      const timer = setTimeout(() => inputRef.current?.focus(), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [open]);
 
   // Keyboard shortcut: Cmd/Ctrl + K
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
+        setQuery("");
+        setResults([]);
+        setSelectedIndex(0);
         setOpen(true);
       }
       if (e.key === "Escape") {
@@ -53,16 +98,6 @@ export function GlobalSearch() {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Focus input when dialog opens
-  useEffect(() => {
-    if (open) {
-      setTimeout(() => inputRef.current?.focus(), 100);
-      setQuery("");
-      setResults([]);
-      setSelectedIndex(0);
-    }
-  }, [open]);
-
   const search = useCallback(async (q: string) => {
     if (!q.trim()) {
       setResults([]);
@@ -71,7 +106,6 @@ export function GlobalSearch() {
 
     setLoading(true);
     try {
-      const extract = (res: any) => Array.isArray(res) ? res : res?.data || [];
       const [inventoryRes, suppliersRes] = await Promise.all([
         fetch(`/api/inventory?search=${encodeURIComponent(q)}`).then((r) => r.json()).catch(() => []),
         fetch(`/api/suppliers`).then((r) => r.json()).catch(() => []),
@@ -80,9 +114,9 @@ export function GlobalSearch() {
       const items: SearchResult[] = [];
 
       // Inventory items
-      const invItems = extract(inventoryRes);
+      const invItems = extractRows<SearchableItem>(inventoryRes);
       if (invItems.length) {
-        invItems.slice(0, 5).forEach((item: any) => {
+        invItems.slice(0, 5).forEach((item) => {
           items.push({
             type: "item",
             id: item.id,
@@ -91,7 +125,7 @@ export function GlobalSearch() {
             href: "/inventory",
           });
           // Batches
-          item.batches?.slice(0, 2).forEach((batch: any) => {
+          item.batches?.slice(0, 2).forEach((batch) => {
             items.push({
               type: "batch",
               id: batch.id,
@@ -104,12 +138,12 @@ export function GlobalSearch() {
       }
 
       // Suppliers
-      const suppliers = extract(suppliersRes);
+      const suppliers = extractRows<SearchableSupplier>(suppliersRes);
       if (suppliers.length) {
         suppliers
-          .filter((s: any) => s.name.toLowerCase().includes(q.toLowerCase()))
+          .filter((s) => s.name.toLowerCase().includes(q.toLowerCase()))
           .slice(0, 3)
-          .forEach((supplier: any) => {
+          .forEach((supplier) => {
             items.push({
               type: "supplier",
               id: supplier.id,
@@ -168,7 +202,7 @@ export function GlobalSearch() {
     <>
       {/* Trigger button in header - shown via keyboard shortcut hint */}
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => handleOpenChange(true)}
         className="flex items-center gap-2 rounded-lg border bg-muted px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent transition-colors"
       >
         <Search className="h-4 w-4" />
@@ -178,7 +212,7 @@ export function GlobalSearch() {
         </kbd>
       </button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="sm:max-w-lg p-0 gap-0">
           {/* Search input */}
           <div className="flex items-center border-b px-4">

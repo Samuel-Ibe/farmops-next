@@ -3,6 +3,29 @@ import { prisma } from "@/lib/prisma";
 import { cachedJsonResponse } from "@/lib/pagination";
 import { mutationGuard, requireAuth, resolveFarmScope } from "@/lib/api-auth";
 
+export interface AlertItem {
+  id: string;
+  type: string;
+  urgency: string;
+  itemName: string;
+  batchNumber?: string;
+  unitOfMeasure: string;
+  quantityRemaining?: number;
+  currentStock?: number;
+  warehouseName?: string;
+  expiryDate?: Date | null;
+  daysUntilExpiry?: number;
+  estimatedValue?: number;
+  reorderPoint?: number | null;
+  minimumStockLevel?: number | null;
+  maximumStockLevel?: number | null;
+  reorderQuantity?: number | null;
+  category?: string;
+  totalValue?: number;
+  batchCount?: number;
+  warehouses?: string;
+}
+
 /**
  * GET /api/alerts
  * Returns all active alerts: expiry warnings, low stock, and critical items.
@@ -27,7 +50,12 @@ export async function GET(request: Request) {
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + daysAhead);
 
-    const alerts: { expiry: any[]; lowStock: any[]; criticalStock: any[]; expiringBatches: any[] } = {
+    const alerts: {
+      expiry: AlertItem[];
+      lowStock: AlertItem[];
+      criticalStock: AlertItem[];
+      expiringBatches: AlertItem[];
+    } = {
       expiry: [],
       lowStock: [],
       criticalStock: [],
@@ -149,7 +177,7 @@ export async function GET(request: Request) {
           totalQty <= item.minimumStockLevel * 0.5
         ) {
           const existing = alerts.lowStock.find(
-            (a: any) => a.id === item.id
+            (a) => a.id === item.id
           );
           if (existing) {
             existing.urgency = "CRITICAL";
@@ -172,18 +200,17 @@ export async function GET(request: Request) {
       totalAlerts:
         alerts.expiry.length + alerts.lowStock.length,
       expiredCount: alerts.expiringBatches.filter(
-        (a: any) => a.urgency === "EXPIRED"
+        (a) => a.urgency === "EXPIRED"
       ).length,
       criticalCount:
         alerts.criticalStock.length +
         alerts.expiringBatches.filter(
-          (a: any) => a.urgency === "CRITICAL"
+          (a) => a.urgency === "CRITICAL"
         ).length,
       lowStockCount: alerts.lowStock.length,
       expiryWarningCount: alerts.expiry.length,
       potentialWasteValue: alerts.expiry.reduce(
-        (sum: number, a: any) =>
-          sum + ((a.estimatedValue as number) || 0),
+        (sum, a) => sum + (a.estimatedValue ?? 0),
         0
       ),
     };

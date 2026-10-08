@@ -3,7 +3,6 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { loginSchema } from "@/lib/validations";
 import {
   checkRateLimit,
   clearLoginFailures,
@@ -96,17 +95,23 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role = (user as any).role;
+        token.role = user.role;
         token.id = user.id;
-        token.farmId = (user as any).farmId || null;
+        token.farmId = user.farmId;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        (session.user as any).role = token.role;
-        (session.user as any).id = token.id;
-        (session.user as any).farmId = token.farmId || null;
+        // JWT claims arrive as untyped payload fields: narrow before use.
+        const id = token.id;
+        const sub = token.sub;
+        const role = token.role;
+        const farmId = token.farmId;
+        session.user.id =
+          typeof id === "string" ? id : typeof sub === "string" ? sub : "";
+        session.user.role = typeof role === "string" ? role : "FIELD_WORKER";
+        session.user.farmId = typeof farmId === "string" ? farmId : null;
       }
       return session;
     },

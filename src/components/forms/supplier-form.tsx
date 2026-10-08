@@ -1,14 +1,37 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { FormDialog } from "@/components/shared/form-dialog";
 import { FormField } from "@/components/ui/form-field";
+
+interface SupplierFormValues {
+  id?: string;
+  name?: string | null;
+  contactPerson?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  rating?: number | null;
+  notes?: string | null;
+}
 
 interface SupplierFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
-  initialData?: any;
+  initialData?: SupplierFormValues | null;
+}
+
+function buildSupplierForm(initialData?: SupplierFormValues | null) {
+  return {
+    name: initialData?.name || "",
+    contactPerson: initialData?.contactPerson || "",
+    email: initialData?.email || "",
+    phone: initialData?.phone || "",
+    address: initialData?.address || "",
+    rating: initialData?.rating?.toString() || "",
+    notes: initialData?.notes || "",
+  };
 }
 
 export function SupplierForm({
@@ -17,39 +40,23 @@ export function SupplierForm({
   onSuccess,
   initialData,
 }: SupplierFormProps) {
-  const [form, setForm] = useState({
-    name: "",
-    contactPerson: "",
-    email: "",
-    phone: "",
-    address: "",
-    rating: "",
-    notes: "",
-  });
+  const [form, setForm] = useState(() => buildSupplierForm(initialData));
 
-  useEffect(() => {
-    if (initialData) {
-      setForm({
-        name: initialData.name || "",
-        contactPerson: initialData.contactPerson || "",
-        email: initialData.email || "",
-        phone: initialData.phone || "",
-        address: initialData.address || "",
-        rating: initialData.rating?.toString() || "",
-        notes: initialData.notes || "",
-      });
-    } else {
-      setForm({
-        name: "",
-        contactPerson: "",
-        email: "",
-        phone: "",
-        address: "",
-        rating: "",
-        notes: "",
-      });
-    }
-  }, [initialData, open]);
+  // Reset the form when the dialog opens or the edit target changes — state
+  // is adjusted during render instead of in an effect
+  // (react-hooks/set-state-in-effect).
+  const [prevProps, setPrevProps] = useState<{
+    initialData: SupplierFormValues | null | undefined;
+    open: boolean;
+  } | null>(null);
+  if (
+    prevProps === null ||
+    prevProps.initialData !== initialData ||
+    prevProps.open !== open
+  ) {
+    setPrevProps({ initialData, open });
+    setForm(buildSupplierForm(initialData));
+  }
 
   const handleSubmit = async () => {
     const url = initialData

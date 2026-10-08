@@ -30,7 +30,7 @@ interface DataTableProps<T> {
   onPageChange?: (page: number) => void;
 }
 
-export function DataTable<T extends Record<string, any>>({
+export function DataTable<T extends Record<string, unknown>>({
   columns,
   data,
   keyExtractor,
@@ -69,7 +69,7 @@ export function DataTable<T extends Record<string, any>>({
                   <TableCell key={col.key} className={col.className}>
                     {col.render
                       ? col.render(item)
-                      : item[col.key]}
+                      : (item[col.key] as React.ReactNode)}
                   </TableCell>
                 ))}
               </TableRow>

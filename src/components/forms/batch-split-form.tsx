@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,7 +39,18 @@ export function BatchSplitForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  // Reset the dialog when it opens or the batch changes — state is adjusted
+  // during render instead of in an effect (react-hooks/set-state-in-effect).
+  const [prevSync, setPrevSync] = useState<{
+    open: boolean;
+    warehouseId: string;
+  } | null>(null);
+  if (
+    prevSync === null ||
+    prevSync.open !== open ||
+    prevSync.warehouseId !== batch.warehouseId
+  ) {
+    setPrevSync({ open, warehouseId: batch.warehouseId });
     if (open) {
       setSplitQuantity("");
       setTargetWarehouseId(batch.warehouseId);
@@ -47,7 +58,7 @@ export function BatchSplitForm({
       setNotes("");
       setError("");
     }
-  }, [open, batch.warehouseId]);
+  }
 
   const splitQty = parseFloat(splitQuantity) || 0;
   const remaining = batch.quantityRemaining - splitQty;

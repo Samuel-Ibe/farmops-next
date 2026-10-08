@@ -18,8 +18,10 @@ pnpm run test:all         # vitest && playwright
 
 The repository is **pnpm-only** (`packageManager` in `package.json`, one
 lockfile). CI runs `pnpm install --frozen-lockfile` → `tsc --noEmit` →
+`eslint . --max-warnings 10` →
 `vitest run` (with a PostgreSQL service: unit **and** real-DB suites) →
-`next build` → Playwright e2e → Docker build + runtime smoke test.
+`next build` → Playwright e2e → Docker build + runtime smoke test. All five
+jobs are required status checks on `master` via branch protection.
 
 ## 2. Current numbers (measured, not aspirational)
 
@@ -27,8 +29,9 @@ lockfile). CI runs `pnpm install --frozen-lockfile` → `tsc --noEmit` →
 |---|---|---|
 | Unit tests | **176 passing** across 15 files (169 pure unit + 7 real-PostgreSQL; the DB 7 self-skip without `DB_TEST_DATABASE_URL`) | `pnpm test` |
 | E2E tests | **35 passing** (13 tenant-isolation adversarial, 17 API contract, 5 auth/UI) | `pnpm run test:e2e` |
-| Type coverage | **93.01%** (40,775 / 43,838) | `npx type-coverage` |
+| Type coverage | **98.26%** (43,230 / 43,992) | `npx type-coverage` |
 | TypeScript | `strict: true`, 0 errors | `npx tsc --noEmit` |
+| ESLint | **0 errors**, 2 warnings (budget 10) — hard CI gate since Phase 4 | `npx eslint . --max-warnings 10` |
 | Branch coverage across `src/lib` | **92.5%** | `pnpm run test:coverage` |
 | Statement coverage across `src/lib` | **27.5%** | coverage include is `src/lib/**` only |
 

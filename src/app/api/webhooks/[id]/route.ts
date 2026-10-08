@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getWebhook, updateWebhook, unregisterWebhook, getDeliveryLogs, triggerWebhooks } from "@/lib/webhooks";
+import { getWebhook, updateWebhook, unregisterWebhook, getDeliveryLogs } from "@/lib/webhooks";
 import { mutationGuard } from "@/lib/api-auth";
 
 /**
@@ -19,7 +19,7 @@ export async function GET(
 
     const logs = getDeliveryLogs(id);
     return NextResponse.json({ webhook, logs: logs.slice(-20) });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Failed to fetch webhook" }, { status: 500 });
   }
 }
@@ -45,7 +45,7 @@ export async function PATCH(
     }
 
     return NextResponse.json(webhook);
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Failed to update webhook" }, { status: 500 });
   }
 }
@@ -70,7 +70,7 @@ export async function DELETE(
     }
 
     return NextResponse.json({ message: "Webhook removed" });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Failed to delete webhook" }, { status: 500 });
   }
 }

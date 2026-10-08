@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
+import { RequestStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { mutationGuard, writeAuditLog, getClientIp, requireAuth, resolveFarmScope } from "@/lib/api-auth";
 import { validate, createRequestSchema } from "@/lib/api-validations";
-import { parsePaginationParams, paginatedResponse, cachedJsonResponse } from "@/lib/pagination";
+import { parsePaginationParams, cachedJsonResponse } from "@/lib/pagination";
 
 export async function GET(request: Request) {
   try {
@@ -14,24 +15,21 @@ export async function GET(request: Request) {
     const pagination = parsePaginationParams(searchParams, { limit: 20 });
 
     const where = {
-      ...(status && { status: status as any }),
+      ...(status && { status: status as RequestStatus }),
       ...(farmId && { farmId }),
     };
 
-    const [requests, total] = await Promise.all([
-      prisma.resourceRequest.findMany({
-        where,
-        include: {
-          item: true, farm: true,
-          requestedBy: { select: { name: true, role: true } },
-          reviewedBy: { select: { name: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        skip: pagination.offset,
-        take: pagination.limit,
-      }),
-      prisma.resourceRequest.count({ where }),
-    ]);
+    const requests = await prisma.resourceRequest.findMany({
+      where,
+      include: {
+        item: true, farm: true,
+        requestedBy: { select: { name: true, role: true } },
+        reviewedBy: { select: { name: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      skip: pagination.offset,
+      take: pagination.limit,
+    });
 
     return cachedJsonResponse(requests, 15);
   } catch (error) {

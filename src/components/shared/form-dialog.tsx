@@ -50,9 +50,11 @@ export function FormDialog({
         toast(successMessage, "success");
       }
       onOpenChange(false);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Form submission error:", err);
-      toast(errorMessage || err?.message || "Something went wrong", "error");
+      const message =
+        errorMessage || (err instanceof Error ? err.message : null) || "Something went wrong";
+      toast(message, "error");
     } finally {
       setSubmitting(false);
     }

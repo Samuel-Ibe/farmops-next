@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,14 +42,27 @@ export function BatchTransferForm({
     (w) => w.isActive && w.id !== batch.warehouseId
   );
 
-  useEffect(() => {
+  // Reset the dialog when it opens or the batch changes — state is adjusted
+  // during render instead of in an effect (react-hooks/set-state-in-effect).
+  // (The old effect also depended on a freshly-filtered array, so it re-ran —
+  // and wiped user input — on every render while open.)
+  const [prevSync, setPrevSync] = useState<{
+    open: boolean;
+    warehouseId: string;
+  } | null>(null);
+  if (
+    prevSync === null ||
+    prevSync.open !== open ||
+    prevSync.warehouseId !== batch.warehouseId
+  ) {
+    setPrevSync({ open, warehouseId: batch.warehouseId });
     if (open) {
       setQuantity("");
       setToWarehouseId(otherWarehouses[0]?.id || "");
       setNotes("");
       setError("");
     }
-  }, [open, otherWarehouses]);
+  }
 
   const transferQty = parseFloat(quantity) || 0;
 

@@ -4,6 +4,9 @@ import { useState, useEffect } from "react";
 import { FormDialog } from "@/components/shared/form-dialog";
 import { FormField } from "@/components/ui/form-field";
 import { FormSelect } from "@/components/ui/form-select";
+import type { InventoryItem, Supplier, Warehouse } from "@prisma/client";
+
+type WarehouseWithFarm = Warehouse & { farm: { name: string } | null };
 
 interface BatchFormProps {
   open: boolean;
@@ -18,9 +21,9 @@ export function BatchForm({
   onSuccess,
   itemId,
 }: BatchFormProps) {
-  const [items, setItems] = useState<any[]>([]);
-  const [warehouses, setWarehouses] = useState<any[]>([]);
-  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseWithFarm[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
   const [form, setForm] = useState({
     itemId: "",
@@ -51,11 +54,19 @@ export function BatchForm({
     }
   }, [open]);
 
-  useEffect(() => {
+  // Pre-select the item when `itemId` (or the dialog's open state) changes —
+  // state is adjusted during render instead of in an effect
+  // (react-hooks/set-state-in-effect).
+  const [prevSync, setPrevSync] = useState<{
+    itemId: string | undefined;
+    open: boolean;
+  } | null>(null);
+  if (prevSync === null || prevSync.itemId !== itemId || prevSync.open !== open) {
+    setPrevSync({ itemId, open });
     if (itemId) {
       setForm((prev) => ({ ...prev, itemId }));
     }
-  }, [itemId, open]);
+  }
 
   const handleSubmit = async () => {
     const res = await fetch("/api/batches", {

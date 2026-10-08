@@ -20,9 +20,19 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
+import type { Prisma } from "@prisma/client";
+
+type PurchaseOrderWithRelations = Prisma.PurchaseOrderGetPayload<{
+  include: {
+    supplier: true;
+    farm: true;
+    items: { include: { item: true } };
+    createdBy: { select: { name: true; role: true } };
+  };
+}>;
 
 export default function PurchaseOrdersPage() {
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<PurchaseOrderWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -31,21 +41,36 @@ export default function PurchaseOrdersPage() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const { toast } = useToast();
 
+  // Data-only loader (no setState): the effect below never reaches setState
+  // synchronously (react-hooks/set-state-in-effect).
+  const loadOrders = useCallback(async () => {
+    const res = await fetch("/api/purchase-orders");
+    if (!res.ok) throw new Error("Failed to fetch purchase orders");
+    const json = await res.json();
+    const data: PurchaseOrderWithRelations[] = Array.isArray(json)
+      ? json
+      : json?.data || [];
+    return data;
+  }, []);
+
+  // Event-handler refresh (shows the spinner).
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/purchase-orders");
-      if (res.ok) { const json = await res.json(); setOrders(Array.isArray(json) ? json : json?.data || []); }
+      setOrders(await loadOrders());
     } catch (err) {
       console.error("Failed to fetch purchase orders:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadOrders]);
 
   useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
+    loadOrders()
+      .then(setOrders)
+      .catch((err) => console.error("Failed to fetch purchase orders:", err))
+      .finally(() => setLoading(false));
+  }, [loadOrders]);
 
   const safeOrders = Array.isArray(orders) ? orders : [];
   const filtered = safeOrders.filter(
@@ -186,7 +211,7 @@ export default function PurchaseOrdersPage() {
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold">{formatCurrency(order.totalAmount || 0)}</p>
+                          <p className="font-bold">{formatCurrency(Number(order.totalAmount || 0))}</p>
                           <p className="text-xs text-muted-foreground">
                             {new Date(order.createdAt).toLocaleDateString()}
                           </p>
@@ -226,12 +251,12 @@ export default function PurchaseOrdersPage() {
                           <div>
                             <p className="text-xs font-medium text-muted-foreground mb-2">Order Items</p>
                             <div className="space-y-1">
-                              {order.items.map((item: any) => (
+                              {order.items.map((item) => (
                                 <div key={item.id} className="flex items-center justify-between text-sm py-1 border-b last:border-0">
                                   <span>{item.item?.name || "Unknown Item"}</span>
                                   <div className="flex items-center gap-4 text-muted-foreground">
-                                    <span>{item.quantity} × {formatCurrency(item.unitPrice || 0)}</span>
-                                    <span className="font-medium">{formatCurrency(item.totalPrice || 0)}</span>
+                                    <span>{item.quantity} × {formatCurrency(Number(item.unitPrice || 0))}</span>
+                                    <span className="font-medium">{formatCurrency(Number(item.totalPrice || 0))}</span>
                                   </div>
                                 </div>
                               ))}

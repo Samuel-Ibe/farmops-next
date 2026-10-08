@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   mutationGuard,
@@ -9,7 +10,7 @@ import {
   withIdempotency,
 } from "@/lib/api-auth";
 import { validate, createTransactionSchema } from "@/lib/api-validations";
-import { parsePaginationParams, paginatedResponse, cachedJsonResponse } from "@/lib/pagination";
+import { parsePaginationParams, cachedJsonResponse } from "@/lib/pagination";
 import { applyStockDelta, transactionTypeDelta } from "@/lib/stock";
 import { logRouteError } from "@/lib/logger";
 import { warehouseInScope } from "@/lib/tenant";
@@ -25,27 +26,24 @@ export async function GET(request: Request) {
     const pagination = parsePaginationParams(searchParams, { limit: 20 });
 
     const where = {
-      ...(type && { type: type as any }),
+      ...(type && { type: type as Prisma.StockTransactionWhereInput["type"] }),
       ...(batchId && { batchId }),
       ...(farmId && { farmId }),
     };
 
-    const [transactions, total] = await Promise.all([
-      prisma.stockTransaction.findMany({
-        where,
-        include: {
-          batch: { include: { item: true } },
-          fromWarehouse: true,
-          toWarehouse: true,
-          performedBy: { select: { name: true, role: true } },
-          farm: true,
-        },
-        orderBy: { createdAt: "desc" },
-        skip: pagination.offset,
-        take: pagination.limit,
-      }),
-      prisma.stockTransaction.count({ where }),
-    ]);
+    const transactions = await prisma.stockTransaction.findMany({
+      where,
+      include: {
+        batch: { include: { item: true } },
+        fromWarehouse: true,
+        toWarehouse: true,
+        performedBy: { select: { name: true, role: true } },
+        farm: true,
+      },
+      orderBy: { createdAt: "desc" },
+      skip: pagination.offset,
+      take: pagination.limit,
+    });
 
     return cachedJsonResponse(transactions, 15);
   } catch (error) {

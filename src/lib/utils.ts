@@ -81,8 +81,11 @@ export function getExpiryStatusColor(expiryDate: Date | string): string {
  * Some APIs return plain arrays, others return { data: [...] }.
  * This helper handles both formats consistently.
  */
-export function extractData<T>(response: any): T[] {
+export function extractData<T>(response: unknown): T[] {
   if (Array.isArray(response)) return response;
-  if (response?.data && Array.isArray(response.data)) return response.data;
+  if (response && typeof response === "object" && "data" in response) {
+    const { data } = response as { data?: unknown };
+    if (Array.isArray(data)) return data;
+  }
   return [];
 }

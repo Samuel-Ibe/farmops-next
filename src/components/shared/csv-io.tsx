@@ -19,7 +19,6 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
-  X,
 } from "lucide-react";
 
 interface CsvIOProps {
@@ -29,10 +28,19 @@ interface CsvIOProps {
   onSuccess?: () => void;
 }
 
+interface CsvResult {
+  success?: boolean;
+  message?: string;
+  created?: number;
+  updated?: number;
+  skipped?: number;
+  errors?: string[];
+}
+
 export function CsvIO({ open, onOpenChange, type, onSuccess }: CsvIOProps) {
   const [mode, setMode] = useState<"choose" | "importing" | "exporting" | "result">("choose");
-  const [result, setResult] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<CsvResult | null>(null);
+  const [, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -58,8 +66,11 @@ export function CsvIO({ open, onOpenChange, type, onSuccess }: CsvIOProps) {
       setResult({ success: true, message: `${typeName} exported successfully!` });
       setMode("result");
       toast(`${typeName} exported`, "success");
-    } catch (err: any) {
-      setResult({ success: false, message: err.message || "Export failed" });
+    } catch (err) {
+      setResult({
+        success: false,
+        message: (err instanceof Error && err.message) || "Export failed",
+      });
       setMode("result");
       toast("Export failed", "error");
     } finally {
@@ -86,8 +97,11 @@ export function CsvIO({ open, onOpenChange, type, onSuccess }: CsvIOProps) {
       setMode("result");
       toast(data.message, "success");
       onSuccess?.();
-    } catch (err: any) {
-      setResult({ success: false, message: err.message || "Import failed" });
+    } catch (err) {
+      setResult({
+        success: false,
+        message: (err instanceof Error && err.message) || "Import failed",
+      });
       setMode("result");
       toast("Import failed", "error");
     } finally {
@@ -214,12 +228,12 @@ export function CsvIO({ open, onOpenChange, type, onSuccess }: CsvIOProps) {
                         {result.created} created
                       </Badge>
                     )}
-                    {result.updated > 0 && (
+                    {(result.updated ?? 0) > 0 && (
                       <Badge variant="outline" className="bg-blue-50 text-blue-700">
                         {result.updated} updated
                       </Badge>
                     )}
-                    {result.skipped > 0 && (
+                    {(result.skipped ?? 0) > 0 && (
                       <Badge variant="outline" className="bg-amber-50 text-amber-700">
                         {result.skipped} skipped
                       </Badge>
@@ -227,9 +241,9 @@ export function CsvIO({ open, onOpenChange, type, onSuccess }: CsvIOProps) {
                   </div>
                 )}
 
-                {result.errors?.length > 0 && (
+                {(result.errors?.length ?? 0) > 0 && (
                   <div className="rounded-lg bg-red-50 border border-red-200 p-3 max-h-32 overflow-y-auto">
-                    {result.errors.map((err: string, i: number) => (
+                    {result.errors?.map((err, i) => (
                       <p key={i} className="text-xs text-red-600">
                         {err}
                       </p>

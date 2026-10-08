@@ -9,10 +9,8 @@ import { Button } from "@/components/ui/button";
 import { DashboardSkeleton } from "@/components/ui/skeleton";
 import {
   Package,
-  Warehouse,
   TrendingUp,
   AlertTriangle,
-  Clock,
   ClipboardList,
   Tractor,
   DollarSign,
@@ -20,7 +18,6 @@ import {
   ArrowUp,
   ArrowRightLeft,
   RefreshCw,
-  ShoppingCart,
   Trash2,
   Truck,
 } from "lucide-react";
@@ -35,42 +32,31 @@ import {
   PieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
   Legend,
 } from "recharts";
+import type { DashboardOverviewDTO } from "@/app/api/dashboard/overview/route";
 
 const COLORS = ["#16a34a", "#ca8a04", "#dc2626", "#2563eb", "#7c3aed", "#0891b2", "#d946ef"];
 
-interface DashboardData {
-  totalItems: number;
-  inventoryValue: number;
-  lowStockItems: number;
-  expiringSoon: number;
-  pendingRequests: number;
-  activeFarms: number;
-  totalWarehouses: number;
-  totalTransactions: number;
-  recentTransactions: any[];
-  lowStockAlerts: any[];
-  inventoryValueByCategory: { name: string; value: number; color: string }[];
-  transactionTrends: { name: string; received: number; issued: number; wasted: number }[];
-  wasteBreakdown: { name: string; value: number }[];
-  topSuppliers: { name: string; orders: number; value: number }[];
-}
-
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData | null>(null);
+  const [data, setData] = useState<DashboardOverviewDTO | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchDashboard = async () => {
+  // Data-only loader: no setState inside, so the effect below never reaches
+  // setState synchronously (react-hooks/set-state-in-effect).
+  const fetchDashboard = async (): Promise<DashboardOverviewDTO> => {
+    // One server-side aggregated request; farm scope comes from the
+    // session inside the route — never from query parameters.
+    const res = await fetch("/api/dashboard/overview");
+    if (!res.ok) throw new Error(`Dashboard request failed: ${res.status}`);
+    const payload: DashboardOverviewDTO = await res.json();
+    return payload;
+  };
+
+  const reloadDashboard = async () => {
     setLoading(true);
     try {
-      // One server-side aggregated request; farm scope comes from the
-      // session inside the route — never from query parameters.
-      const res = await fetch("/api/dashboard/overview");
-      if (!res.ok) throw new Error(`Dashboard request failed: ${res.status}`);
-      setData(await res.json());
+      setData(await fetchDashboard());
     } catch (err) {
       console.error("Failed to load dashboard:", err);
     } finally {
@@ -79,7 +65,10 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    fetchDashboard();
+    fetchDashboard()
+      .then(setData)
+      .catch((err) => console.error("Failed to load dashboard:", err))
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) {
@@ -90,7 +79,7 @@ export default function DashboardPage() {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground">Failed to load dashboard data</p>
-        <Button onClick={fetchDashboard} variant="outline" className="mt-4">
+        <Button onClick={reloadDashboard} variant="outline" className="mt-4">
           <RefreshCw className="h-4 w-4 mr-2" />
           Retry
         </Button>
@@ -113,7 +102,7 @@ export default function DashboardPage() {
         title="Dashboard"
         description="Overview of your farm inventory and operations"
       >
-        <Button variant="outline" onClick={fetchDashboard}>
+        <Button variant="outline" onClick={reloadDashboard}>
           <RefreshCw className="h-4 w-4 mr-2" />
           Refresh
         </Button>
@@ -184,7 +173,7 @@ export default function DashboardPage() {
                     outerRadius={100}
                     dataKey="value"
                   >
-                    {data.inventoryValueByCategory.map((_: any, index: number) => (
+                    {data.inventoryValueByCategory.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -212,7 +201,7 @@ export default function DashboardPage() {
               <p className="text-sm text-muted-foreground text-center py-8">All items are well-stocked</p>
             ) : (
               <div className="space-y-3">
-                {data.lowStockAlerts.map((alert: any) => {
+                {data.lowStockAlerts.map((alert) => {
                   const current = alert.totalQuantity || 0;
                   const minimum = alert.minimumStockLevel || 1;
                   const pct = Math.min((current / minimum) * 100, 100);
@@ -284,7 +273,7 @@ export default function DashboardPage() {
               <p className="text-sm text-muted-foreground text-center py-8">No purchase orders yet</p>
             ) : (
               <div className="space-y-3">
-                {data.topSuppliers.map((supplier, i) => {
+                {data.topSuppliers.map((supplier) => {
                   const maxVal = data.topSuppliers[0]?.value || 1;
                   const pct = (supplier.value / maxVal) * 100;
                   return (
@@ -317,7 +306,7 @@ export default function DashboardPage() {
               <p className="text-sm text-muted-foreground text-center py-8">No transactions yet</p>
             ) : (
               <div className="space-y-3">
-                {data.recentTransactions.map((tx: any) => (
+                {data.recentTransactions.map((tx) => (
                   <div key={tx.id} className="flex items-center gap-3 rounded-lg border p-3">
                     <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted shrink-0">
                       {tx.type === "RECEIVED" && <ArrowDown className="h-4 w-4 text-green-600" />}
@@ -329,7 +318,7 @@ export default function DashboardPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium truncate">
-                          {tx.batch?.item?.name || tx.batchNumber || "Unknown"}
+                          {tx.batch?.item?.name || tx.batch?.batchNumber || "Unknown"}
                         </p>
                         <StatusBadge status={tx.type} />
                       </div>

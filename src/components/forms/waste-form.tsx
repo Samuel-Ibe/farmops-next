@@ -16,6 +16,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { FormSelect } from "@/components/ui/form-select";
 import { useToast } from "@/components/ui/toast";
 import { Loader2 } from "lucide-react";
+import type { Farm, InventoryBatch } from "@prisma/client";
+import type { InventoryItemWithTotals } from "@/app/api/inventory/route";
+
+type SelectableBatch = InventoryBatch & { itemName: string; unit: string };
 
 interface WasteFormProps {
   open: boolean;
@@ -25,8 +29,8 @@ interface WasteFormProps {
 
 export function WasteForm({ open, onOpenChange, onSuccess }: WasteFormProps) {
   const [loading, setLoading] = useState(false);
-  const [batches, setBatches] = useState<any[]>([]);
-  const [farms, setFarms] = useState<any[]>([]);
+  const [batches, setBatches] = useState<SelectableBatch[]>([]);
+  const [farms, setFarms] = useState<Farm[]>([]);
   const { toast } = useToast();
 
   const [form, setForm] = useState({
@@ -45,10 +49,10 @@ export function WasteForm({ open, onOpenChange, onSuccess }: WasteFormProps) {
         fetch("/api/farms").then((r) => r.json()),
       ]).then(([items, f]) => {
         // Flatten batches from all items
-        const allBatches = items.flatMap((item: any) =>
+        const allBatches = (items as InventoryItemWithTotals[]).flatMap((item) =>
           (item.batches || [])
-            .filter((b: any) => b.status === "ACTIVE")
-            .map((b: any) => ({
+            .filter((b) => b.status === "ACTIVE")
+            .map((b) => ({
               ...b,
               itemName: item.name,
               unit: item.unitOfMeasure,
@@ -57,7 +61,15 @@ export function WasteForm({ open, onOpenChange, onSuccess }: WasteFormProps) {
         setBatches(allBatches);
         setFarms(f);
       });
+    }
+  }, [open]);
 
+  // Clear the form when the dialog is (re)opened — state is adjusted during
+  // render instead of in an effect (react-hooks/set-state-in-effect).
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (prevOpen !== open) {
+    setPrevOpen(open);
+    if (open) {
       setForm({
         batchId: "",
         quantity: 0,
@@ -67,7 +79,7 @@ export function WasteForm({ open, onOpenChange, onSuccess }: WasteFormProps) {
         estimatedValue: 0,
       });
     }
-  }, [open]);
+  }
 
   const selectedBatch = batches.find((b) => b.id === form.batchId);
 

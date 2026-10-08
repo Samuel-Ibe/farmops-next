@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import type { Html5Qrcode } from "html5-qrcode";
+import type { Prisma } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +10,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { SearchInput } from "@/components/shared/search-input";
 import { useToast } from "@/components/ui/toast";
 import { formatCurrency, isExpiringSoon, isExpired, daysUntilExpiry } from "@/lib/utils";
+import type { InventoryItemWithTotals } from "@/app/api/inventory/route";
 import {
   QrCode,
   Search,
@@ -18,23 +21,47 @@ import {
   Camera,
   CameraOff,
   ScanLine,
-  X,
   ChevronDown,
   ChevronUp,
   Boxes,
 } from "lucide-react";
 
+type ScannedBatch = Prisma.InventoryBatchGetPayload<{
+  include: {
+    item: { include: { category: true } };
+    warehouse: { include: { farm: true } };
+    supplier: true;
+  };
+}>;
+
+type RelatedBatch = Prisma.InventoryBatchGetPayload<{
+  include: { warehouse: { include: { farm: true } } };
+}>;
+
+type ScannedTransaction = Prisma.StockTransactionGetPayload<{
+  include: { performedBy: { select: { name: true } } };
+}>;
+
+interface ScannedResult {
+  found: boolean;
+  matchType?: "item" | "batch";
+  item?: InventoryItemWithTotals;
+  batch?: ScannedBatch;
+  relatedBatches?: RelatedBatch[];
+  recentTransactions?: ScannedTransaction[];
+}
+
 export default function QRPage() {
   const [scanInput, setScanInput] = useState("");
-  const [scannedItem, setScannedItem] = useState<any>(null);
+  const [scannedItem, setScannedItem] = useState<ScannedResult | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<InventoryItemWithTotals[]>([]);
   const [search, setSearch] = useState("");
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const [scanResult, setScanResult] = useState("");
   const [showBatches, setShowBatches] = useState(true);
-  const scannerRef = useRef<any>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -56,6 +83,43 @@ export default function QRPage() {
       }
     };
   }, []);
+
+  const handleScanCode = useCallback(async (code: string) => {
+    if (!code.trim()) return;
+    setScanLoading(true);
+    setScannedItem(null);
+
+    try {
+      // Try QR API first
+      const qrRes = await fetch(`/api/qr?code=${encodeURIComponent(code)}`);
+      if (qrRes.ok) {
+        const data: ScannedResult = await qrRes.json();
+        if (data.found) {
+          setScannedItem(data);
+          toast(`Found: ${data.item?.name || data.batch?.batchNumber}`, "success");
+          setScanLoading(false);
+          return;
+        }
+      }
+
+      // Fallback to inventory search
+      const res = await fetch(`/api/inventory?search=${encodeURIComponent(code)}`);
+      if (res.ok) {
+        const results: InventoryItemWithTotals[] = await res.json();
+        if (results.length > 0) {
+          setScannedItem({ found: true, matchType: "item", item: results[0] });
+          toast(`Found: ${results[0].name}`, "success");
+        } else {
+          toast("No item found for this code", "warning");
+        }
+      }
+    } catch (err) {
+      console.error("Scan error:", err);
+      toast("Scan lookup failed", "error");
+    } finally {
+      setScanLoading(false);
+    }
+  }, [toast]);
 
   const startCamera = useCallback(async () => {
     setCameraError("");
@@ -102,18 +166,19 @@ export default function QRPage() {
       );
 
       setCameraActive(true);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Camera error:", err);
+      const message = err instanceof Error ? err.message : "";
       setCameraError(
-        err?.message?.includes("NotAllowedError")
+        message.includes("NotAllowedError")
           ? "Camera access denied. Please allow camera permissions."
-          : err?.message?.includes("NotFoundError")
+          : message.includes("NotFoundError")
           ? "No camera found on this device."
           : "Failed to start camera. Try using the search input instead."
       );
       setCameraActive(false);
     }
-  }, []);
+  }, [handleScanCode]);
 
   const stopCamera = useCallback(async () => {
     if (scannerRef.current) {
@@ -124,51 +189,6 @@ export default function QRPage() {
     }
     setCameraActive(false);
   }, []);
-
-  const toggleCamera = useCallback(() => {
-    if (cameraActive) {
-      stopCamera();
-    } else {
-      startCamera();
-    }
-  }, [cameraActive, startCamera, stopCamera]);
-
-  const handleScanCode = async (code: string) => {
-    if (!code.trim()) return;
-    setScanLoading(true);
-    setScannedItem(null);
-
-    try {
-      // Try QR API first
-      const qrRes = await fetch(`/api/qr?code=${encodeURIComponent(code)}`);
-      if (qrRes.ok) {
-        const data = await qrRes.json();
-        if (data.found) {
-          setScannedItem(data);
-          toast(`Found: ${data.item?.name || data.batch?.batchNumber}`, "success");
-          setScanLoading(false);
-          return;
-        }
-      }
-
-      // Fallback to inventory search
-      const res = await fetch(`/api/inventory?search=${encodeURIComponent(code)}`);
-      if (res.ok) {
-        const results = await res.json();
-        if (results.length > 0) {
-          setScannedItem({ found: true, matchType: "item", item: results[0] });
-          toast(`Found: ${results[0].name}`, "success");
-        } else {
-          toast("No item found for this code", "warning");
-        }
-      }
-    } catch (err) {
-      console.error("Scan error:", err);
-      toast("Scan lookup failed", "error");
-    } finally {
-      setScanLoading(false);
-    }
-  };
 
   const handleManualScan = () => {
     handleScanCode(scanInput);
@@ -328,7 +348,7 @@ export default function QRPage() {
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Unit Cost</p>
-                      <p className="font-medium">{formatCurrency(scannedItem.batch.purchasePrice)}</p>
+                      <p className="font-medium">{formatCurrency(Number(scannedItem.batch.purchasePrice))}</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Warehouse</p>
@@ -380,12 +400,11 @@ export default function QRPage() {
                     <Badge variant="outline">
                       {scannedItem.item.totalQuantity} {scannedItem.item.unitOfMeasure} available
                     </Badge>
-                  )}
-                  {scannedItem.item?.totalValue !== undefined && (
-                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                      {formatCurrency(scannedItem.item.totalValue)}
-                    </Badge>
-                  )}
+                  )}                      {scannedItem.item?.totalValue !== undefined && (
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                          {formatCurrency(Number(scannedItem.item.totalValue))}
+                        </Badge>
+                      )}
                 </div>
                 {scannedItem.item?.description && (
                   <p className="text-sm text-muted-foreground mt-2">{scannedItem.item.description}</p>
@@ -405,7 +424,7 @@ export default function QRPage() {
                   </button>
                   {showBatches && (
                     <div className="space-y-2">
-                      {scannedItem.relatedBatches.map((batch: any) => {
+                      {scannedItem.relatedBatches.map((batch) => {
                         const expiring = batch.expiryDate && isExpiringSoon(batch.expiryDate);
                         const expired = batch.expiryDate && isExpired(batch.expiryDate);
                         return (
@@ -427,7 +446,7 @@ export default function QRPage() {
                                   {batch.quantityRemaining} {scannedItem.item?.unitOfMeasure}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                  {formatCurrency((batch.purchasePrice || 0) * batch.quantityRemaining)}
+                                  {formatCurrency(Number(batch.purchasePrice || 0) * batch.quantityRemaining)}
                                 </p>
                               </div>
                             </div>
@@ -456,7 +475,7 @@ export default function QRPage() {
                 <div>
                   <h4 className="text-sm font-medium mb-2">Recent Transactions</h4>
                   <div className="space-y-1">
-                    {scannedItem.recentTransactions.slice(0, 5).map((tx: any) => (
+                    {scannedItem.recentTransactions.slice(0, 5).map((tx) => (
                       <div key={tx.id} className="flex items-center justify-between text-sm py-1 border-b last:border-0">
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className={`text-xs ${

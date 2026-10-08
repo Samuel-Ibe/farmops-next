@@ -1,15 +1,32 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { FormDialog } from "@/components/shared/form-dialog";
 import { FormField } from "@/components/ui/form-field";
 import { Textarea } from "@/components/ui/textarea";
+
+interface FarmFormValues {
+  id?: string;
+  name?: string | null;
+  location?: string | null;
+  acreage?: number | null;
+  description?: string | null;
+}
 
 interface FarmFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
-  initialData?: any;
+  initialData?: FarmFormValues | null;
+}
+
+function buildFarmForm(initialData?: FarmFormValues | null) {
+  return {
+    name: initialData?.name || "",
+    location: initialData?.location || "",
+    acreage: initialData?.acreage?.toString() || "",
+    description: initialData?.description || "",
+  };
 }
 
 export function FarmForm({
@@ -18,25 +35,23 @@ export function FarmForm({
   onSuccess,
   initialData,
 }: FarmFormProps) {
-  const [form, setForm] = useState({
-    name: "",
-    location: "",
-    acreage: "",
-    description: "",
-  });
+  const [form, setForm] = useState(() => buildFarmForm(initialData));
 
-  useEffect(() => {
-    if (initialData) {
-      setForm({
-        name: initialData.name || "",
-        location: initialData.location || "",
-        acreage: initialData.acreage?.toString() || "",
-        description: initialData.description || "",
-      });
-    } else {
-      setForm({ name: "", location: "", acreage: "", description: "" });
-    }
-  }, [initialData, open]);
+  // Reset the form when the dialog opens or the edit target changes — state
+  // is adjusted during render instead of in an effect
+  // (react-hooks/set-state-in-effect).
+  const [prevProps, setPrevProps] = useState<{
+    initialData: FarmFormValues | null | undefined;
+    open: boolean;
+  } | null>(null);
+  if (
+    prevProps === null ||
+    prevProps.initialData !== initialData ||
+    prevProps.open !== open
+  ) {
+    setPrevProps({ initialData, open });
+    setForm(buildFarmForm(initialData));
+  }
 
   const handleSubmit = async () => {
     const url = initialData ? `/api/farms/${initialData.id}` : "/api/farms";

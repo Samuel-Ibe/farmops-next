@@ -18,31 +18,48 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
+import type { Prisma } from "@prisma/client";
+
+type SupplierWithCounts = Prisma.SupplierGetPayload<{
+  include: { _count: { select: { batches: true } } };
+}>;
 
 export default function SuppliersPage() {
-  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierWithCounts[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
-  const [editSupplier, setEditSupplier] = useState<any>(null);
-  const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [editSupplier, setEditSupplier] = useState<SupplierWithCounts | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SupplierWithCounts | null>(null);
   const { toast } = useToast();
 
+  // Data-only loader (no setState): the effect below never reaches setState
+  // synchronously (react-hooks/set-state-in-effect).
+  const loadSuppliers = useCallback(async () => {
+    const res = await fetch("/api/suppliers");
+    if (!res.ok) throw new Error("Failed to fetch suppliers");
+    const data: SupplierWithCounts[] = await res.json();
+    return data;
+  }, []);
+
+  // Event-handler refresh (shows the spinner).
   const fetchSuppliers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/suppliers");
-      if (res.ok) setSuppliers(await res.json());
+      setSuppliers(await loadSuppliers());
     } catch (err) {
       console.error("Failed to fetch suppliers:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadSuppliers]);
 
   useEffect(() => {
-    fetchSuppliers();
-  }, []);
+    loadSuppliers()
+      .then(setSuppliers)
+      .catch((err) => console.error("Failed to fetch suppliers:", err))
+      .finally(() => setLoading(false));
+  }, [loadSuppliers]);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -161,14 +178,14 @@ export default function SuppliersPage() {
                         <Star
                           key={i}
                           className={`h-4 w-4 ${
-                            i < Math.round(supplier.rating)
+                            i < Math.round(supplier.rating ?? 0)
                               ? "fill-amber-400 text-amber-400"
                               : "text-gray-200"
                           }`}
                         />
                       ))}
                       <span className="text-xs text-muted-foreground ml-1">
-                        {supplier.rating.toFixed(1)}
+                        {supplier.rating?.toFixed(1)}
                       </span>
                     </div>
                   )}
@@ -197,7 +214,7 @@ export default function SuppliersPage() {
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
         title="Delete Supplier"
-        description={`Are you sure you want to delete "${deleteTarget?.name}"? ${deleteTarget?.batches?.length > 0 ? "This supplier has associated inventory and will be deactivated." : "This action cannot be undone."}`}
+        description={`Are you sure you want to delete "${deleteTarget?.name}"? ${(deleteTarget?._count?.batches ?? 0) > 0 ? "This supplier has associated inventory and will be deactivated." : "This action cannot be undone."}`}
         onConfirm={handleDelete}
       />
     </div>

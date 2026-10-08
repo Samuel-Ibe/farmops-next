@@ -16,7 +16,7 @@ Baseline: second engineering/security audit • 2 October 2026
 | P0 | 1. Tenant E2E Security | Prove cross-tenant isolation through real HTTP | ✅ **Done** — `tests/e2e/tenant-isolation.spec.ts` (13 scenarios: reads, ID-based reads, writes, transfers/splits, exports, unassigned/role-restricted users, admin control, idempotency). Whole e2e suite **35/35 green** locally and wired as a required CI job. Fixed 2 real leaks found while writing it: unscoped `GET /api/seasons` and unscoped `GET /api/reports` (dashboard/suppliers/valuation branches) — both regression-covered by the suite. |
 | P0 | 2. PostgreSQL Correctness | Concurrency, rollback, DB invariants | ✅ **Done** — `tests/db/stock-concurrency.test.ts` runs the acceptance scenario against real PostgreSQL (100 units, two concurrent 80-unit deductions → exactly one succeeds, final 20; 20-way storm; mid-transfer rollback; failure-path rollback). `CHECK ("quantityRemaining" >= 0)` added; suite proves the DB rejects negative stock. Migrations validated against a fresh database **and** a copy of real existing data. |
 | P0 | 3. Deployment & Migrations | Reproducible build + controlled schema evolution | ✅ **Done** — pnpm-only (`package-lock.json` removed, `packageManager: pnpm@12.8.1`, CI uses frozen lockfile), baseline migration `prisma/migrations/0_init` + `migration_lock.toml`, Dockerfile fixed (it could not build or start before) and a **Docker build + runtime smoke test** job in CI (health/db/auth checks, logs on failure). |
-| P1 | 4. Type Safety | Remove unsafe client boundaries | ⏳ Not started (rules in §8) |
+| P1 | 4. Type Safety | Remove unsafe client boundaries | ✅ **Done** — `eslint .`: **0 errors** (was 249: 206 `no-explicit-any`, 38 `set-state-in-effect`, plus empty-object/unescaped-entity debt), 2 warnings vs the `--max-warnings 10` budget; `type-coverage` **98.26%** (was 93.01%); typed session via `src/types/next-auth.d.ts`, route-level DTO exports, `Prisma.*UpdateInput`/`WhereInput` across mutated routes. Lint promoted to a **hard CI gate** (`continue-on-error` removed) and `master` now enforces all five checks via branch protection. |
 | P1 | 5. Domain Service Refactor | Separate HTTP from business logic | ⏳ Not started (domains in §9) |
 | P1 | 6. Observability | Diagnose failures in production | 🔶 Partial — structured JSON logs with request IDs, readiness/liveness health endpoint and `logRouteError` already exist; remaining: endpoint/DB latency metrics, authorization-denial counters, production error monitoring. Failure-diagnosis runbook delivered as [`docs/operations.md`](operations.md). |
 | P2 | 7. Documentation | Single authoritative current-state docs | 🔶 Done for this round — roadmap promoted into this file, metrics re-measured, completed-vs-open split refreshed in `docs/security.md`, `docs/testing.md`, README. |
@@ -179,6 +179,7 @@ Keep Prisma models separate from client DTOs.
 Use discriminated unions for status-heavy objects where useful.
 Centralize API response types where practical.
 Target: critical client domains contain no intentional any; lint can eventually become a blocking CI gate.
+Status: achieved — 0 lint errors and lint is a blocking CI gate (Oct 2026).
 9. Phase 5 — Domain Service Refactor
 Refactor high-risk workflows without rewriting the whole application.
 Domain
@@ -236,6 +237,7 @@ Build Next.js application.
 Build Docker image.
 Start container and run smoke test.
 Promote each check to a required gate only after the repository is clean enough that the gate is useful.
+Status: all five CI checks are required on `master` through branch protection (applied to admins as well, Oct 2026).
 13. Git/PR Strategy
 Use one branch per engineering objective.
 Keep security fixes separate from formatting-only changes.

@@ -87,7 +87,7 @@ export default function RegisterPage() {
       const next = `/verify-email?email=${encodeURIComponent(form.email)}`;
       const target = devCode ? `${next}&code=${encodeURIComponent(devCode)}` : next;
       setTimeout(() => router.push(target), devCode ? 3000 : 1500);
-    } catch (err) {
+    } catch {
       setError("An error occurred. Please try again.");
     } finally {
       setLoading(false);

@@ -15,7 +15,18 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FormSelect } from "@/components/ui/form-select";
 import { useToast } from "@/components/ui/toast";
-import { Plus, Trash2, Loader2, AlertTriangle } from "lucide-react";
+import { Loader2, AlertTriangle } from "lucide-react";
+import type { InventoryBatch, Warehouse } from "@prisma/client";
+import type { InventoryItemWithTotals } from "@/app/api/inventory/route";
+
+type WarehouseWithFarm = Warehouse & { farm?: { name: string } | null };
+type CountBatch = InventoryBatch & { itemName: string; unit: string };
+type CountItem = {
+  batchId: string;
+  systemQuantity: number;
+  countedQuantity: number;
+  notes: string;
+};
 
 interface StockCountFormProps {
   open: boolean;
@@ -25,12 +36,10 @@ interface StockCountFormProps {
 
 export function StockCountForm({ open, onOpenChange, onSuccess }: StockCountFormProps) {
   const [loading, setLoading] = useState(false);
-  const [warehouses, setWarehouses] = useState<any[]>([]);
-  const [batches, setBatches] = useState<any[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseWithFarm[]>([]);
+  const [batches, setBatches] = useState<CountBatch[]>([]);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState("");
-  const [countItems, setCountItems] = useState<
-    { batchId: string; systemQuantity: number; countedQuantity: number; notes: string }[]
-  >([]);
+  const [countItems, setCountItems] = useState<CountItem[]>([]);
   const [notes, setNotes] = useState("");
   const { toast } = useToast();
 
@@ -38,24 +47,33 @@ export function StockCountForm({ open, onOpenChange, onSuccess }: StockCountForm
     if (open) {
       fetch("/api/warehouses")
         .then((r) => r.json())
-        .then(setWarehouses)
+        .then((data: WarehouseWithFarm[]) => setWarehouses(data))
         .catch(() => {});
+    }
+  }, [open]);
 
+  // Clear the previous count when the dialog is (re)opened — state is
+  // adjusted during render instead of in an effect
+  // (react-hooks/set-state-in-effect).
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (prevOpen !== open) {
+    setPrevOpen(open);
+    if (open) {
       setSelectedWarehouseId("");
       setCountItems([]);
       setNotes("");
     }
-  }, [open]);
+  }
 
   useEffect(() => {
     if (selectedWarehouseId) {
       fetch(`/api/inventory`)
         .then((r) => r.json())
-        .then((items) => {
-          const warehouseBatches = items.flatMap((item: any) =>
+        .then((items: InventoryItemWithTotals[]) => {
+          const warehouseBatches = items.flatMap((item) =>
             (item.batches || [])
-              .filter((b: any) => b.warehouseId === selectedWarehouseId && b.status === "ACTIVE")
-              .map((b: any) => ({
+              .filter((b) => b.warehouseId === selectedWarehouseId && b.status === "ACTIVE")
+              .map((b) => ({
                 ...b,
                 itemName: item.name,
                 unit: item.unitOfMeasure,
@@ -64,7 +82,7 @@ export function StockCountForm({ open, onOpenChange, onSuccess }: StockCountForm
           setBatches(warehouseBatches);
           // Pre-fill with current system quantities
           setCountItems(
-            warehouseBatches.map((b: any) => ({
+            warehouseBatches.map((b) => ({
               batchId: b.id,
               systemQuantity: b.quantityRemaining,
               countedQuantity: b.quantityRemaining,
@@ -76,9 +94,13 @@ export function StockCountForm({ open, onOpenChange, onSuccess }: StockCountForm
     }
   }, [selectedWarehouseId]);
 
-  const updateCountItem = (index: number, field: string, value: any) => {
-    const newItems = [...countItems];
-    (newItems[index] as any)[field] = value;
+  const updateCountItem = (
+    index: number,
+    field: keyof CountItem,
+    value: string | number
+  ) => {
+    const newItems: CountItem[] = [...countItems];
+    newItems[index] = { ...newItems[index], [field]: value } as CountItem;
     setCountItems(newItems);
   };
 

@@ -77,7 +77,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
               {session?.user?.name || "User"}
             </p>
             <p className="text-xs text-muted-foreground">
-              {ROLE_LABELS[(session?.user as any)?.role] || "User"}
+              {ROLE_LABELS[session?.user?.role ?? ""] || "User"}
             </p>
           </div>
           <ChevronDown className="h-4 w-4 text-muted-foreground" />

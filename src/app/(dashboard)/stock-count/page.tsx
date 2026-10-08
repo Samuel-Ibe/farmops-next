@@ -16,29 +16,53 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
+import type { Prisma } from "@prisma/client";
+
+type StockCountWithRelations = Prisma.StockCountGetPayload<{
+  include: {
+    warehouse: true;
+    countedBy: { select: { name: true; role: true } };
+    items: { include: { batch: { include: { item: true } } } };
+  };
+}>;
 
 export default function StockCountPage() {
-  const [counts, setCounts] = useState<any[]>([]);
+  const [counts, setCounts] = useState<StockCountWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // Data-only loader (no setState): the effect below never reaches setState
+  // synchronously (react-hooks/set-state-in-effect).
+  const loadCounts = useCallback(async () => {
+    const res = await fetch("/api/stock-count");
+    if (!res.ok) throw new Error("Failed to fetch stock counts");
+    const json = await res.json();
+    const data: StockCountWithRelations[] = Array.isArray(json)
+      ? json
+      : json?.data || [];
+    return data;
+  }, []);
+
+  // Event-handler refresh (shows the spinner).
   const fetchCounts = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/stock-count");
-      if (res.ok) { const json = await res.json(); setCounts(Array.isArray(json) ? json : json?.data || []); }
+      setCounts(await loadCounts());
     } catch (err) {
       console.error("Failed to fetch stock counts:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadCounts]);
 
   useEffect(() => {
-    fetchCounts();
-  }, [fetchCounts]);
+    loadCounts()
+      .then(setCounts)
+      .catch((err) => console.error("Failed to fetch stock counts:", err))
+      .finally(() => setLoading(false));
+  }, [loadCounts]);
 
   const safeCounts = Array.isArray(counts) ? counts : [];
   const filtered = safeCounts.filter(
@@ -91,10 +115,10 @@ export default function StockCountPage() {
               {filtered.map((count) => {
                 const totalItems = count.items?.length || 0;
                 const discrepancies = count.items?.filter(
-                  (i: any) => Math.abs(i.variance || 0) > 0
+                  (i) => Math.abs(i.variance || 0) > 0
                 ).length || 0;
                 const totalVariance = count.items?.reduce(
-                  (sum: number, i: any) => sum + (i.variance || 0),
+                  (sum, i) => sum + (i.variance || 0),
                   0
                 ) || 0;
                 const isExpanded = expandedId === count.id;
@@ -156,7 +180,7 @@ export default function StockCountPage() {
                     {isExpanded && count.items && count.items.length > 0 && (
                       <div className="border-t bg-gray-50/50 p-4">
                         <div className="grid gap-2">
-                          {count.items.map((item: any) => {
+                          {count.items.map((item) => {
                             const variance = item.variance || 0;
                             return (
                               <div

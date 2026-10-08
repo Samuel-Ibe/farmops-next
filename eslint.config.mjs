@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated artifacts / local scratch (never committed):
+    ".freebuff/**",
+    "coverage/**",
+    "**/*.log",
   ]),
 ]);
 

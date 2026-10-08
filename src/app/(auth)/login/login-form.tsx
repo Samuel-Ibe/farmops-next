@@ -40,8 +40,8 @@ export default function LoginForm({ callbackUrl = "/dashboard", authError }: Log
       } else {
         setError("Login failed. Please try again.");
       }
-    } catch (err: any) {
-      if (err?.message?.includes("NEXT_REDIRECT")) {
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("NEXT_REDIRECT")) {
         window.location.href = callbackUrl;
         return;
       }

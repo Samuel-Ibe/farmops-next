@@ -13,12 +13,21 @@ import {
   ClipboardList,
   CheckCircle,
   XCircle,
-  Clock,
   Loader2,
 } from "lucide-react";
+import type { Prisma } from "@prisma/client";
+
+type RequestWithRelations = Prisma.ResourceRequestGetPayload<{
+  include: {
+    item: true;
+    farm: true;
+    requestedBy: { select: { name: true; role: true } };
+    reviewedBy: { select: { name: true } };
+  };
+}>;
 
 export default function RequestsPage() {
-  const [requests, setRequests] = useState<any[]>([]);
+  const [requests, setRequests] = useState<RequestWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -26,23 +35,38 @@ export default function RequestsPage() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const { toast } = useToast();
 
+  // Data-only loader (no setState): the effect below never reaches setState
+  // synchronously (react-hooks/set-state-in-effect).
+  const loadRequests = useCallback(async (status: string) => {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    const res = await fetch(`/api/requests?${params}`);
+    if (!res.ok) throw new Error("Failed to fetch requests");
+    const json = await res.json();
+    const data: RequestWithRelations[] = Array.isArray(json)
+      ? json
+      : json?.data || [];
+    return data;
+  }, []);
+
+  // Event-handler refresh (shows the spinner; honours the status filter).
   const fetchRequests = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (statusFilter) params.set("status", statusFilter);
-      const res = await fetch(`/api/requests?${params}`);
-      if (res.ok) { const json = await res.json(); setRequests(Array.isArray(json) ? json : json?.data || []); }
+      setRequests(await loadRequests(statusFilter));
     } catch (err) {
       console.error("Failed to fetch requests:", err);
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [loadRequests, statusFilter]);
 
   useEffect(() => {
-    fetchRequests();
-  }, []);
+    loadRequests("")
+      .then(setRequests)
+      .catch((err) => console.error("Failed to fetch requests:", err))
+      .finally(() => setLoading(false));
+  }, [loadRequests]);
 
   const safeRequests = Array.isArray(requests) ? requests : [];
   const filtered = safeRequests.filter(
@@ -67,7 +91,7 @@ export default function RequestsPage() {
         const err = await res.json();
         toast(err.error || "Failed to approve request", "error");
       }
-    } catch (err) {
+    } catch {
       toast("Failed to approve request", "error");
     } finally {
       setProcessingId(null);
@@ -89,7 +113,7 @@ export default function RequestsPage() {
         const err = await res.json();
         toast(err.error || "Failed to reject request", "error");
       }
-    } catch (err) {
+    } catch {
       toast("Failed to reject request", "error");
     } finally {
       setProcessingId(null);

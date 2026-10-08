@@ -3,13 +3,11 @@
 import { useState } from "react";
 import { Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useI18n, LANGUAGE_OPTIONS, type Locale } from "@/lib/i18n";
+import { useI18n, LANGUAGE_OPTIONS } from "@/lib/i18n";
 
 export function LanguageSwitcher() {
   const { locale, setLocale, t } = useI18n();
   const [open, setOpen] = useState(false);
-
-  const currentLang = LANGUAGE_OPTIONS.find((l) => l.value === locale);
 
   return (
     <div className="relative">

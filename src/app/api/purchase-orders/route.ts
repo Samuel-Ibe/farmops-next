@@ -17,20 +17,17 @@ export async function GET(request: Request) {
       ...(farmId && { farmId }),
     };
 
-    const [orders, total] = await Promise.all([
-      prisma.purchaseOrder.findMany({
-        where,
-        include: {
-          supplier: true, farm: true,
-          items: { include: { item: true } },
-          createdBy: { select: { name: true, role: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        skip: pagination.offset,
-        take: pagination.limit,
-      }),
-      prisma.purchaseOrder.count({ where }),
-    ]);
+    const orders = await prisma.purchaseOrder.findMany({
+      where,
+      include: {
+        supplier: true, farm: true,
+        items: { include: { item: true } },
+        createdBy: { select: { name: true, role: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      skip: pagination.offset,
+      take: pagination.limit,
+    });
 
     return cachedJsonResponse(orders, 30);
   } catch (error) {
@@ -62,14 +59,14 @@ export async function POST(request: Request) {
     const count = await prisma.purchaseOrder.count();
     const now = new Date();
     const orderNumber = `PO-${now.getFullYear().toString().slice(-2)}${(now.getMonth() + 1).toString().padStart(2, "0")}-${(count + 1).toString().padStart(4, "0")}`;
-    const totalAmount = items.reduce((sum: number, item: any) => sum + item.quantity * item.unitPrice, 0);
+    const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
 
     const order = await prisma.purchaseOrder.create({
       data: {
         orderNumber, supplierId, farmId: scopedFarmId, createdById: user.id, totalAmount,
         expectedDeliveryDate: expectedDeliveryDate ? new Date(expectedDeliveryDate) : null,
         notes: notes || undefined,
-        items: { create: items.map((item: any) => ({ itemId: item.itemId, quantity: item.quantity, unitPrice: item.unitPrice, totalPrice: item.quantity * item.unitPrice })) },
+        items: { create: items.map((item) => ({ itemId: item.itemId, quantity: item.quantity, unitPrice: item.unitPrice, totalPrice: item.quantity * item.unitPrice })) },
       },
       include: { supplier: true, items: { include: { item: true } } },
     });

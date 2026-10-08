@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/page-header";
+import type { Notification } from "@prisma/client";
 import {
   Bell,
   AlertTriangle,
@@ -15,24 +15,36 @@ import {
 } from "lucide-react";
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Data-only loader (no setState): the effect below never reaches setState
+  // synchronously (react-hooks/set-state-in-effect).
+  const loadNotifications = useCallback(async () => {
+    const res = await fetch("/api/notifications");
+    if (!res.ok) throw new Error("Failed to fetch notifications");
+    const data: Notification[] = await res.json();
+    return data;
+  }, []);
+
+  // Event-handler refresh (shows the spinner).
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/notifications");
-      if (res.ok) setNotifications(await res.json());
+      setNotifications(await loadNotifications());
     } catch (err) {
       console.error("Failed to fetch notifications:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadNotifications]);
 
   useEffect(() => {
-    fetchNotifications();
-  }, []);
+    loadNotifications()
+      .then(setNotifications)
+      .catch((err) => console.error("Failed to fetch notifications:", err))
+      .finally(() => setLoading(false));
+  }, [loadNotifications]);
 
   const markAllRead = async () => {
     try {
@@ -82,7 +94,7 @@ export default function NotificationsPage() {
             <Bell className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-lg font-medium">No notifications</p>
             <p className="text-sm text-muted-foreground mt-1">
-              You're all caught up!
+              You&rsquo;re all caught up!
             </p>
           </CardContent>
         </Card>

@@ -14,7 +14,7 @@ export async function POST() {
       );
     }
 
-    const { stdout, stderr } = await execAsync("npx tsx prisma/seed.ts", {
+    const { stdout } = await execAsync("npx tsx prisma/seed.ts", {
       cwd: process.cwd(),
       timeout: 60000,
     });
@@ -23,10 +23,13 @@ export async function POST() {
       message: "Database seeded successfully",
       output: stdout,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Seed error:", error);
     return NextResponse.json(
-      { error: "Seed failed", details: error.message },
+      {
+        error: "Seed failed",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 }
     );
   }

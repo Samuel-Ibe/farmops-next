@@ -2,11 +2,93 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/api-auth";
 
+// ─── Response types (shared with the intelligence page) ─────
+
+export interface Forecast {
+  itemId: string;
+  itemName: string;
+  category: string;
+  unit: string;
+  currentStock: number;
+  avgMonthlyConsumption: number;
+  forecast3Months: number;
+  forecast6Months: number;
+  monthsOfStockLeft: number;
+  monthlyUsage: number[];
+}
+
+export interface ReorderRecommendation {
+  itemId: string;
+  itemName: string;
+  category: string;
+  unit: string;
+  currentStock: number;
+  reorderPoint: number;
+  reorderQuantity: number;
+  maxStock: number;
+  urgency: "critical" | "warning" | "low" | "none";
+  recommendedQuantity: number;
+  defaultSupplier: string | null;
+  supplierContact: string | null;
+  expiryWarnings: {
+    batchNumber: string;
+    quantityRemaining: number;
+    expiryDate: Date | null;
+    daysUntilExpiry: number;
+  }[];
+}
+
+export type IntelligenceAnomaly =
+  | {
+      type: "CONSUMPTION_SPIKE";
+      severity: string;
+      itemId: string;
+      itemName: string;
+      month: string;
+      value: number;
+      average: number;
+      deviation: number;
+      message: string;
+    }
+  | {
+      type: "HIGH_WASTE";
+      severity: string;
+      itemId: string;
+      itemName: string;
+      wasteQuantity: number;
+      wasteRatio: number;
+      message: string;
+    }
+  | {
+      type: "NEAR_DEPLETION";
+      severity: string;
+      itemId: string;
+      itemName: string;
+      batchNumber: string;
+      remaining: number;
+      message: string;
+    };
+
+export interface IntelligenceResponse {
+  forecasting?: Forecast[];
+  reorderRecommendations?: ReorderRecommendation[];
+  anomalies?: IntelligenceAnomaly[];
+  summary?: {
+    totalItems: number;
+    totalStock: number;
+    totalValue: number;
+    itemsBelowReorder: number;
+    criticalAnomalies: number;
+    forecastAccuracy: string;
+    dataRange: string;
+  };
+}
+
 // ─── Consumption Forecasting ───────────────────────────────
 // Uses weighted moving average of monthly consumption over last 6 months
 // to predict future monthly usage per item.
 
-async function computeForecasting() {
+async function computeForecasting(): Promise<Forecast[]> {
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
@@ -79,7 +161,7 @@ async function computeForecasting() {
 }
 
 // ─── Reorder Recommendations ───────────────────────────────
-async function computeReorderRecommendations() {
+async function computeReorderRecommendations(): Promise<ReorderRecommendation[]> {
   const items = await prisma.inventoryItem.findMany({
     where: { isActive: true },
     include: {
@@ -157,7 +239,7 @@ async function computeReorderRecommendations() {
 // Detects unusual patterns: sudden spikes in consumption,
 // negative stock anomalies, unusually high waste, and transaction outliers.
 
-async function computeAnomalies() {
+async function computeAnomalies(): Promise<IntelligenceAnomaly[]> {
   const threeMonthsAgo = new Date();
   threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
 
@@ -174,8 +256,11 @@ async function computeAnomalies() {
   });
 
   // Group by item per month
-  const monthlyByItem = new Map<string, { month: string; total: number; transactions: any[] }[]>();
-  const anomalies: any[] = [];
+  const monthlyByItem = new Map<
+    string,
+    { month: string; total: number; transactions: typeof transactions }[]
+  >();
+  const anomalies: IntelligenceAnomaly[] = [];
 
   for (const tx of transactions) {
     const itemId = tx.batch?.itemId;
@@ -202,7 +287,6 @@ async function computeAnomalies() {
     if (consumptions.length < 2) continue;
 
     const avg = consumptions.reduce((a, b) => a + b, 0) / consumptions.length;
-    const maxDeviation = consumptions.reduce((m, v) => Math.max(m, Math.abs(v - avg)), 0);
     const threshold = Math.max(avg * 1.5, 10); // 150% of average or minimum 10
 
     for (const monthData of months) {
@@ -285,7 +369,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const analysis = searchParams.get("analysis") || "all";
 
-    const result: Record<string, any> = {};
+    const result: IntelligenceResponse = {};
 
     if (analysis === "all" || analysis === "forecast") {
       result.forecasting = await computeForecasting();
@@ -319,11 +403,11 @@ export async function GET(request: Request) {
       );
 
       const itemsBelowReorder = (result.reorderRecommendations || []).filter(
-        (r: any) => r.urgency !== "none"
+        (r) => r.urgency !== "none"
       ).length;
 
       const criticalAnomalies = (result.anomalies || []).filter(
-        (a: any) => a.severity === "critical" || a.severity === "high"
+        (a) => a.severity === "critical" || a.severity === "high"
       ).length;
 
       result.summary = {

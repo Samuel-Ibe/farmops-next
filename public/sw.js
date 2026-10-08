@@ -1,4 +1,3 @@
-const CACHE_NAME = "farmops-v1";
 const STATIC_CACHE = "farmops-static-v1";
 const DYNAMIC_CACHE = "farmops-dynamic-v1";
 

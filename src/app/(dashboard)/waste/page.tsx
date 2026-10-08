@@ -14,28 +14,51 @@ import {
   Package,
   Loader2,
 } from "lucide-react";
+import type { Prisma } from "@prisma/client";
+
+type WasteRecordWithRelations = Prisma.WasteRecordGetPayload<{
+  include: {
+    batch: { include: { item: true; warehouse: true } };
+    reportedBy: { select: { name: true; role: true } };
+  };
+}>;
 
 export default function WastePage() {
-  const [records, setRecords] = useState<any[]>([]);
+  const [records, setRecords] = useState<WasteRecordWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
 
+  // Data-only loader (no setState): the effect below never reaches setState
+  // synchronously (react-hooks/set-state-in-effect).
+  const loadWaste = useCallback(async () => {
+    const res = await fetch("/api/waste");
+    if (!res.ok) throw new Error("Failed to fetch waste records");
+    const json = await res.json();
+    const data: WasteRecordWithRelations[] = Array.isArray(json)
+      ? json
+      : json?.data || [];
+    return data;
+  }, []);
+
+  // Event-handler refresh (shows the spinner).
   const fetchWaste = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/waste");
-      if (res.ok) { const json = await res.json(); setRecords(Array.isArray(json) ? json : json?.data || []); }
+      setRecords(await loadWaste());
     } catch (err) {
       console.error("Failed to fetch waste records:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadWaste]);
 
   useEffect(() => {
-    fetchWaste();
-  }, []);
+    loadWaste()
+      .then(setRecords)
+      .catch((err) => console.error("Failed to fetch waste records:", err))
+      .finally(() => setLoading(false));
+  }, [loadWaste]);
 
   const safeRecords = Array.isArray(records) ? records : [];
   const filtered = safeRecords.filter(
@@ -46,7 +69,7 @@ export default function WastePage() {
 
   const totalCost = records.reduce((sum, r) => sum + Number(r.estimatedValue || 0), 0);
 
-  const getReasonColor = (reason: string) => {
+  const getReasonColor = (reason: string | null) => {
     switch (reason?.toUpperCase()) {
       case "EXPIRED":
       case "EXPIRING":

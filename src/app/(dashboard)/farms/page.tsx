@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/page-header";
 import { SearchInput } from "@/components/shared/search-input";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
@@ -18,31 +17,51 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
+import type { Prisma } from "@prisma/client";
+
+type FarmWithCounts = Prisma.FarmGetPayload<{
+  include: {
+    warehouses: { include: { _count: { select: { batches: true } } } };
+    _count: { select: { warehouses: true; resourceRequests: true } };
+  };
+}>;
 
 export default function FarmsPage() {
-  const [farms, setFarms] = useState<any[]>([]);
+  const [farms, setFarms] = useState<FarmWithCounts[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
-  const [editFarm, setEditFarm] = useState<any>(null);
-  const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [editFarm, setEditFarm] = useState<FarmWithCounts | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<FarmWithCounts | null>(null);
   const { toast } = useToast();
 
+  // Data-only loader (no setState): the effect below never reaches setState
+  // synchronously (react-hooks/set-state-in-effect).
+  const loadFarms = useCallback(async () => {
+    const res = await fetch("/api/farms");
+    if (!res.ok) throw new Error("Failed to fetch farms");
+    const data: FarmWithCounts[] = await res.json();
+    return data;
+  }, []);
+
+  // Event-handler refresh (shows the spinner).
   const fetchFarms = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/farms");
-      if (res.ok) setFarms(await res.json());
+      setFarms(await loadFarms());
     } catch (err) {
       console.error("Failed to fetch farms:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadFarms]);
 
   useEffect(() => {
-    fetchFarms();
-  }, []);
+    loadFarms()
+      .then(setFarms)
+      .catch((err) => console.error("Failed to fetch farms:", err))
+      .finally(() => setLoading(false));
+  }, [loadFarms]);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;

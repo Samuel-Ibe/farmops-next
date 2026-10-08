@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createApiKey, listApiKeys, revokeApiKey } from "@/lib/api-keys";
+import { createApiKey, listApiKeys } from "@/lib/api-keys";
 import { mutationGuard, requireRole } from "@/lib/api-auth";
 
 /**
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     const apiKey = createApiKey(name, permissions, farmId || null);
     // Return the full key only on creation
     return NextResponse.json(apiKey, { status: 201 });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Failed to create API key" }, { status: 500 });
   }
 }

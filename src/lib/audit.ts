@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 
 interface AuditLogParams {
@@ -5,8 +6,8 @@ interface AuditLogParams {
   action: "CREATE" | "UPDATE" | "DELETE" | "LOGIN" | "LOGOUT";
   entity: string;
   entityId?: string;
-  oldValues?: Record<string, any>;
-  newValues?: Record<string, any>;
+  oldValues?: Prisma.InputJsonObject;
+  newValues?: Prisma.InputJsonObject;
   ipAddress?: string;
   userAgent?: string;
 }
@@ -39,7 +40,7 @@ export async function logCreate(
   userId: string,
   entity: string,
   entityId: string,
-  newValues: Record<string, any>
+  newValues: Prisma.InputJsonObject
 ) {
   return logAudit({
     userId,
@@ -54,8 +55,8 @@ export async function logUpdate(
   userId: string,
   entity: string,
   entityId: string,
-  oldValues: Record<string, any>,
-  newValues: Record<string, any>
+  oldValues: Prisma.InputJsonObject,
+  newValues: Prisma.InputJsonObject
 ) {
   return logAudit({
     userId,
@@ -71,7 +72,7 @@ export async function logDelete(
   userId: string,
   entity: string,
   entityId: string,
-  oldValues: Record<string, any>
+  oldValues: Prisma.InputJsonObject
 ) {
   return logAudit({
     userId,

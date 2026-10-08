@@ -12,20 +12,17 @@ export async function GET(request: Request) {
     const farmScope = resolveFarmScope(user, searchParams.get("farmId"));
     const where = farmScope !== null ? { warehouse: { farmId: farmScope } } : {};
     const pagination = parsePaginationParams(searchParams, { limit: 20 });
-    const [counts, total] = await Promise.all([
-      prisma.stockCount.findMany({
-        where,
-        include: {
-          warehouse: true,
-          countedBy: { select: { name: true, role: true } },
-          items: { include: { batch: { include: { item: true } } } },
-        },
-        orderBy: { createdAt: "desc" },
-        skip: pagination.offset,
-        take: pagination.limit,
-      }),
-      prisma.stockCount.count({ where }),
-    ]);
+    const counts = await prisma.stockCount.findMany({
+      where,
+      include: {
+        warehouse: true,
+        countedBy: { select: { name: true, role: true } },
+        items: { include: { batch: { include: { item: true } } } },
+      },
+      orderBy: { createdAt: "desc" },
+      skip: pagination.offset,
+      take: pagination.limit,
+    });
     return cachedJsonResponse(counts, 30);
   } catch (error) {
     console.error("Error fetching stock counts:", error);

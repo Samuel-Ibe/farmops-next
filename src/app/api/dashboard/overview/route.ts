@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, resolveFarmScope } from "@/lib/api-auth";
 import { cachedJsonResponse } from "@/lib/pagination";
@@ -13,6 +14,23 @@ import { logRouteError } from "@/lib/logger";
  * dedicated DTO the dashboard renders directly.
  */
 
+export type DashboardTransaction = Prisma.StockTransactionGetPayload<{
+  include: {
+    batch: { include: { item: true } };
+    fromWarehouse: true;
+    toWarehouse: true;
+    performedBy: { select: { name: true; role: true } };
+  };
+}>;
+
+export type DashboardLowStockItem = Prisma.InventoryItemGetPayload<{
+  include: {
+    category: true;
+    batches: { include: { warehouse: { include: { farm: true } } } };
+    _count: { select: { batches: true } };
+  };
+}> & { totalQuantity: number; totalValue: number };
+
 export interface DashboardOverviewDTO {
   totalItems: number;
   inventoryValue: number;
@@ -22,8 +40,8 @@ export interface DashboardOverviewDTO {
   activeFarms: number;
   totalWarehouses: number;
   totalTransactions: number;
-  recentTransactions: unknown[];
-  lowStockAlerts: unknown[];
+  recentTransactions: DashboardTransaction[];
+  lowStockAlerts: DashboardLowStockItem[];
   inventoryValueByCategory: { name: string; value: number; color: string }[];
   transactionTrends: { name: string; received: number; issued: number; wasted: number }[];
   wasteBreakdown: { name: string; value: number }[];

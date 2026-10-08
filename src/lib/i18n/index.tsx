@@ -6,7 +6,7 @@ import ewe from "@/lib/i18n/locales/ewe.json";
 
 export type Locale = "en" | "tw" | "ga" | "ewe";
 
-const locales: Record<Locale, Record<string, any>> = { en, tw, ga, ewe };
+const locales: Record<Locale, Record<string, unknown>> = { en, tw, ga, ewe };
 
 interface I18nContextType {
   locale: Locale;
@@ -16,12 +16,12 @@ interface I18nContextType {
 
 const I18nContext = createContext<I18nContextType | undefined>(undefined);
 
-function getNestedValue(obj: Record<string, any>, path: string): string {
+function getNestedValue(obj: Record<string, unknown>, path: string): string {
   const keys = path.split(".");
-  let current: any = obj;
+  let current: unknown = obj;
   for (const key of keys) {
     if (current == null || typeof current !== "object") return path;
-    current = current[key];
+    current = (current as Record<string, unknown>)[key];
   }
   return typeof current === "string" ? current : path;
 }
@@ -30,10 +30,11 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>("en");
 
   useEffect(() => {
-    const saved = localStorage.getItem("farmops-locale") as Locale;
-    if (saved && locales[saved]) {
-      setLocaleState(saved);
-    }
+    const saved = localStorage.getItem("farmops-locale") as Locale | null;
+    if (!saved || !locales[saved]) return;
+    // Deferred one microtask: the effect itself must not set state
+    // synchronously (react-hooks/set-state-in-effect).
+    void Promise.resolve().then(() => setLocaleState(saved));
   }, []);
 
   const setLocale = useCallback((newLocale: Locale) => {

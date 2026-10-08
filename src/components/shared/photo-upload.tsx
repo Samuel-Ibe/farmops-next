@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { Camera, Upload, X, Image as ImageIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Camera, X, Image as ImageIcon } from "lucide-react";
 
 interface PhotoUploadProps {
   currentImage?: string | null;
@@ -72,10 +71,10 @@ export function PhotoUpload({
         URL.revokeObjectURL(localPreview);
         setPreview(data.url);
         onUpload(data.url);
-      } catch (err: any) {
+      } catch (err) {
         URL.revokeObjectURL(localPreview);
         setPreview(currentImage || null);
-        onError?.(err.message || "Upload failed");
+        onError?.(err instanceof Error ? err.message : "Upload failed");
       } finally {
         setUploading(false);
       }

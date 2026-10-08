@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { mutationGuard, writeAuditLog, getClientIp, requireAuth, resolveFarmScope } from "@/lib/api-auth";
 import { applyStockDelta } from "@/lib/stock";
@@ -6,7 +7,7 @@ import { logRouteError } from "@/lib/logger";
 
 // Stock counts are scoped to the warehouse's farm
 function farmScopeWhere(user: { role: string; farmId?: string | null }) {
-  const farmScope = resolveFarmScope(user as any);
+  const farmScope = resolveFarmScope(user);
   return farmScope !== null ? { warehouse: { farmId: farmScope } } : {};
 }
 
@@ -65,7 +66,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Stock count not found" }, { status: 404 });
     }
 
-    const allowedUpdates: Record<string, any> = {};
+    const allowedUpdates: Prisma.StockCountUpdateInput = {};
 
     // Status update: IN_PROGRESS -> COMPLETED -> RECONCILED
     if (body.status) {
@@ -177,7 +178,7 @@ export async function PATCH(
       entity: "StockCount",
       entityId: id,
       oldValues: { status: existing.status },
-      newValues: { status: allowedUpdates.status || existing.status },
+      newValues: { status: String(allowedUpdates.status || existing.status) },
       ipAddress: getClientIp(request),
     });
 

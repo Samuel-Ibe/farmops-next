@@ -4,13 +4,44 @@ import { useState, useEffect } from "react";
 import { FormDialog } from "@/components/shared/form-dialog";
 import { FormField } from "@/components/ui/form-field";
 import { FormSelect } from "@/components/ui/form-select";
-import { Textarea } from "@/components/ui/textarea";
+import type { Category, Supplier } from "@prisma/client";
+
+interface InventoryFormValues {
+  id?: string;
+  name?: string | null;
+  categoryId?: string | null;
+  unitOfMeasure?: string | null;
+  description?: string | null;
+  minimumStockLevel?: number | null;
+  maximumStockLevel?: number | null;
+  reorderPoint?: number | null;
+  reorderQuantity?: number | null;
+  defaultSupplierId?: string | null;
+  shelfLifeDays?: number | null;
+  requiresExpiryTracking?: boolean;
+}
 
 interface InventoryFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
-  initialData?: any;
+  initialData?: InventoryFormValues | null;
+}
+
+function buildInventoryForm(initialData?: InventoryFormValues | null) {
+  return {
+    name: initialData?.name || "",
+    categoryId: initialData?.categoryId || "",
+    unitOfMeasure: initialData?.unitOfMeasure || "bags",
+    description: initialData?.description || "",
+    minimumStockLevel: initialData?.minimumStockLevel?.toString() || "0",
+    maximumStockLevel: initialData?.maximumStockLevel?.toString() || "",
+    reorderPoint: initialData?.reorderPoint?.toString() || "",
+    reorderQuantity: initialData?.reorderQuantity?.toString() || "",
+    defaultSupplierId: initialData?.defaultSupplierId || "",
+    shelfLifeDays: initialData?.shelfLifeDays?.toString() || "",
+    requiresExpiryTracking: initialData?.requiresExpiryTracking || false,
+  };
 }
 
 export function InventoryForm({
@@ -19,66 +50,38 @@ export function InventoryForm({
   onSuccess,
   initialData,
 }: InventoryFormProps) {
-  const [categories, setCategories] = useState<any[]>([]);
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [form, setForm] = useState({
-    name: "",
-    categoryId: "",
-    unitOfMeasure: "bags",
-    description: "",
-    minimumStockLevel: "0",
-    maximumStockLevel: "",
-    reorderPoint: "",
-    reorderQuantity: "",
-    defaultSupplierId: "",
-    shelfLifeDays: "",
-    requiresExpiryTracking: false,
-  });
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [form, setForm] = useState(() => buildInventoryForm(initialData));
 
   useEffect(() => {
     if (open) {
       fetch("/api/categories")
         .then((r) => r.json())
-        .then(setCategories)
+        .then((data: Category[]) => setCategories(data))
         .catch(() => {});
       fetch("/api/suppliers")
         .then((r) => r.json())
-        .then(setSuppliers)
+        .then((data: Supplier[]) => setSuppliers(data))
         .catch(() => {});
     }
   }, [open]);
 
-  useEffect(() => {
-    if (initialData) {
-      setForm({
-        name: initialData.name || "",
-        categoryId: initialData.categoryId || "",
-        unitOfMeasure: initialData.unitOfMeasure || "bags",
-        description: initialData.description || "",
-        minimumStockLevel: initialData.minimumStockLevel?.toString() || "0",
-        maximumStockLevel: initialData.maximumStockLevel?.toString() || "",
-        reorderPoint: initialData.reorderPoint?.toString() || "",
-        reorderQuantity: initialData.reorderQuantity?.toString() || "",
-        defaultSupplierId: initialData.defaultSupplierId || "",
-        shelfLifeDays: initialData.shelfLifeDays?.toString() || "",
-        requiresExpiryTracking: initialData.requiresExpiryTracking || false,
-      });
-    } else {
-      setForm({
-        name: "",
-        categoryId: "",
-        unitOfMeasure: "bags",
-        description: "",
-        minimumStockLevel: "0",
-        maximumStockLevel: "",
-        reorderPoint: "",
-        reorderQuantity: "",
-        defaultSupplierId: "",
-        shelfLifeDays: "",
-        requiresExpiryTracking: false,
-      });
-    }
-  }, [initialData, open]);
+  // Reset the form when the dialog opens or the edit target changes — state
+  // is adjusted during render instead of in an effect
+  // (react-hooks/set-state-in-effect).
+  const [prevProps, setPrevProps] = useState<{
+    initialData: InventoryFormValues | null | undefined;
+    open: boolean;
+  } | null>(null);
+  if (
+    prevProps === null ||
+    prevProps.initialData !== initialData ||
+    prevProps.open !== open
+  ) {
+    setPrevProps({ initialData, open });
+    setForm(buildInventoryForm(initialData));
+  }
 
   const handleSubmit = async () => {
     const url = initialData

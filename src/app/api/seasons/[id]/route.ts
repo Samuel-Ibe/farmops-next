@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { mutationGuard } from "@/lib/api-auth";
 
@@ -23,7 +24,7 @@ export async function PATCH(
     const body = await request.json();
     const { status, name, startDate, endDate, cropType } = body;
 
-    const updateData: any = {};
+    const updateData: Prisma.SeasonUpdateInput = {};
     if (status) updateData.status = status;
     if (name) updateData.name = name;
     if (startDate) updateData.startDate = new Date(startDate);

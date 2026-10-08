@@ -12,16 +12,49 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { FormSelect } from "@/components/ui/form-select";
 import { useToast } from "@/components/ui/toast";
 import { Plus, Trash2, Loader2 } from "lucide-react";
+import type { Farm, InventoryItem, Supplier } from "@prisma/client";
+
+interface PurchaseOrderFormValues {
+  id?: string;
+  supplierId?: string | null;
+  farmId?: string | null;
+  expectedDeliveryDate?: Date | string | null;
+  notes?: string | null;
+  items?: {
+    itemId?: string;
+    quantity?: number;
+    unitPrice?: number | string;
+    item?: { id?: string };
+  }[];
+}
 
 interface PurchaseOrderFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initialData?: any;
+  initialData?: PurchaseOrderFormValues | null;
   onSuccess: () => void;
+}
+
+type OrderFormItem = { itemId: string; quantity: number; unitPrice: number };
+
+function buildPurchaseOrderForm(initialData?: PurchaseOrderFormValues | null) {
+  return {
+    supplierId: initialData?.supplierId || "",
+    farmId: initialData?.farmId || "",
+    expectedDeliveryDate: initialData?.expectedDeliveryDate
+      ? new Date(initialData.expectedDeliveryDate).toISOString().split("T")[0]
+      : "",
+    notes: initialData?.notes || "",
+    items:
+      initialData?.items?.map((item) => ({
+        itemId: item.itemId || item.item?.id || "",
+        quantity: item.quantity || 1,
+        unitPrice: Number(item.unitPrice) || 0,
+      })) || [{ itemId: "", quantity: 1, unitPrice: 0 }],
+  };
 }
 
 export function PurchaseOrderForm({
@@ -31,22 +64,12 @@ export function PurchaseOrderForm({
   onSuccess,
 }: PurchaseOrderFormProps) {
   const [loading, setLoading] = useState(false);
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [farms, setFarms] = useState<any[]>([]);
-  const [items, setItems] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [farms, setFarms] = useState<Farm[]>([]);
+  const [items, setItems] = useState<InventoryItem[]>([]);
   const { toast } = useToast();
 
-  const [form, setForm] = useState({
-    supplierId: "",
-    farmId: "",
-    expectedDeliveryDate: "",
-    notes: "",
-    items: [{ itemId: "", quantity: 1, unitPrice: 0 }] as {
-      itemId: string;
-      quantity: number;
-      unitPrice: number;
-    }[],
-  });
+  const [form, setForm] = useState(() => buildPurchaseOrderForm(initialData));
 
   useEffect(() => {
     if (open) {
@@ -59,32 +82,24 @@ export function PurchaseOrderForm({
         setFarms(f);
         setItems(i);
       });
-
-      if (initialData) {
-        setForm({
-          supplierId: initialData.supplierId || "",
-          farmId: initialData.farmId || "",
-          expectedDeliveryDate: initialData.expectedDeliveryDate
-            ? new Date(initialData.expectedDeliveryDate).toISOString().split("T")[0]
-            : "",
-          notes: initialData.notes || "",
-          items: initialData.items?.map((item: any) => ({
-            itemId: item.itemId || item.item?.id || "",
-            quantity: item.quantity || 1,
-            unitPrice: Number(item.unitPrice) || 0,
-          })) || [{ itemId: "", quantity: 1, unitPrice: 0 }],
-        });
-      } else {
-        setForm({
-          supplierId: "",
-          farmId: "",
-          expectedDeliveryDate: "",
-          notes: "",
-          items: [{ itemId: "", quantity: 1, unitPrice: 0 }],
-        });
-      }
     }
-  }, [open, initialData]);
+  }, [open]);
+
+  // Reset the form when the dialog opens or the edit target changes — state
+  // is adjusted during render instead of in an effect
+  // (react-hooks/set-state-in-effect).
+  const [prevProps, setPrevProps] = useState<{
+    initialData: PurchaseOrderFormValues | null | undefined;
+    open: boolean;
+  } | null>(null);
+  if (
+    prevProps === null ||
+    prevProps.initialData !== initialData ||
+    prevProps.open !== open
+  ) {
+    setPrevProps({ initialData, open });
+    setForm(buildPurchaseOrderForm(initialData));
+  }
 
   const totalAmount = form.items.reduce(
     (sum, item) => sum + item.quantity * item.unitPrice,
@@ -108,11 +123,11 @@ export function PurchaseOrderForm({
 
   const updateItem = (
     index: number,
-    field: string,
+    field: keyof OrderFormItem,
     value: string | number
   ) => {
-    const newItems = [...form.items];
-    (newItems[index] as any)[field] = value;
+    const newItems: OrderFormItem[] = [...form.items];
+    newItems[index] = { ...newItems[index], [field]: value } as OrderFormItem;
     setForm({ ...form, items: newItems });
   };
 

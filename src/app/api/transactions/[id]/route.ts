@@ -63,7 +63,11 @@ export async function PATCH(
     }
 
     // Transactions are mostly immutable, but allow updating reason and referenceNumber
-    const allowedFields: Record<string, any> = {};
+    const allowedFields: {
+      reason?: string;
+      referenceNumber?: string;
+      farmId?: string;
+    } = {};
     if (body.reason !== undefined) allowedFields.reason = body.reason;
     if (body.referenceNumber !== undefined) allowedFields.referenceNumber = body.referenceNumber;
     // Re-stamping farmId is an admin-only correction

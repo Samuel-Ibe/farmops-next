@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, resolveFarmScope } from "@/lib/api-auth";
 
-function toCSV(rows: Record<string, any>[], headers: string[]): string {
-  const escape = (val: any) => {
+function toCSV(rows: Record<string, unknown>[], headers: string[]): string {
+  const escape = (val: unknown) => {
     if (val === null || val === undefined) return "";
     const str = String(val);
     if (str.includes(",") || str.includes('"') || str.includes("\n")) {
@@ -93,7 +94,7 @@ export async function GET(request: Request) {
     }
 
     if (type === "transactions") {
-      const where: any = {};
+      const where: Prisma.StockTransactionWhereInput = {};
       if (farmId) where.farmId = farmId;
 
       const transactions = await prisma.stockTransaction.findMany({

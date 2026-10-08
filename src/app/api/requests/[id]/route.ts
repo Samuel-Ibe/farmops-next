@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { mutationGuard, writeAuditLog, getClientIp, withIdempotency } from "@/lib/api-auth";
 import { validate, updateRequestSchema } from "@/lib/api-validations";
@@ -36,7 +37,7 @@ export async function PATCH(
     }
 
     return await withIdempotency(request, `PATCH /api/requests:${user.id}`, async () => {
-    const updateData: any = {
+    const updateData: Prisma.ResourceRequestUncheckedUpdateInput = {
       status,
       reviewedById: user.id,
       reviewedAt: new Date(),

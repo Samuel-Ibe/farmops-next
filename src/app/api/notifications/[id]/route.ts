@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthUser, writeAuditLog, getClientIp } from "@/lib/api-auth";
+import { getAuthUser } from "@/lib/api-auth";
 
 export async function GET(
   request: Request,
@@ -57,7 +57,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Not authorized" }, { status: 403 });
     }
 
-    const updateData: Record<string, any> = {};
+    const updateData: { isRead?: boolean } = {};
 
     if (body.isRead !== undefined) {
       updateData.isRead = body.isRead;

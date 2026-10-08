@@ -15,8 +15,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
   Legend,
 } from "recharts";
 import {
@@ -25,82 +23,91 @@ import {
   TrendingUp,
   Loader2,
 } from "lucide-react";
+import type { InventoryItemWithTotals } from "@/app/api/inventory/route";
 
 const COLORS = ["#16a34a", "#ca8a04", "#dc2626", "#2563eb", "#7c3aed", "#0891b2", "#d946ef"];
 
+interface ReportsData {
+  valueByCategory: { name: string; value: number }[];
+  itemsByCategory: { name: string; count: number }[];
+  topItems: { name: string; value: number }[];
+  stockLevels: { name: string; current: number; minimum: number }[];
+  totalValue: number;
+  totalItems: number;
+}
+
 export default function ReportsPage() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<ReportsData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchReports = useCallback(async () => {
-    setLoading(true);
-    try {
-      // Fetch inventory items to compute reports client-side
-      const res = await fetch("/api/inventory");
-      if (res.ok) {
-        const json = await res.json();
-        const items = Array.isArray(json) ? json : json?.data || [];
+  // Data-only loader (no setState) so the effect below never reaches setState
+  // synchronously (react-hooks/set-state-in-effect).
+  const loadReports = useCallback(async (): Promise<ReportsData> => {
+    // Fetch inventory items to compute reports client-side
+    const res = await fetch("/api/inventory");
+    if (!res.ok) throw new Error("Failed to fetch reports");
+    const json = await res.json();
+    const items: InventoryItemWithTotals[] = Array.isArray(json)
+      ? json
+      : json?.data || [];
 
-        // Value by category
-        const catMap = new Map<string, number>();
-        items.forEach((item: any) => {
-          const cat = item.category?.name || "Other";
-          catMap.set(cat, (catMap.get(cat) || 0) + (item.totalValue || 0));
-        });
-        const valueByCategory = Array.from(catMap.entries()).map(([name, value]) => ({
-          name,
-          value,
-        }));
+    // Value by category
+    const catMap = new Map<string, number>();
+    items.forEach((item) => {
+      const cat = item.category?.name || "Other";
+      catMap.set(cat, (catMap.get(cat) || 0) + (item.totalValue || 0));
+    });
+    const valueByCategory = Array.from(catMap.entries()).map(([name, value]) => ({
+      name,
+      value,
+    }));
 
-        // Items by category
-        const catCount = new Map<string, number>();
-        items.forEach((item: any) => {
-          const cat = item.category?.name || "Other";
-          catCount.set(cat, (catCount.get(cat) || 0) + 1);
-        });
-        const itemsByCategory = Array.from(catCount.entries()).map(([name, count]) => ({
-          name,
-          count,
-        }));
+    // Items by category
+    const catCount = new Map<string, number>();
+    items.forEach((item) => {
+      const cat = item.category?.name || "Other";
+      catCount.set(cat, (catCount.get(cat) || 0) + 1);
+    });
+    const itemsByCategory = Array.from(catCount.entries()).map(([name, count]) => ({
+      name,
+      count,
+    }));
 
-        // Top items by value
-        const topItems = items
-          .sort((a: any, b: any) => (b.totalValue || 0) - (a.totalValue || 0))
-          .slice(0, 8)
-          .map((item: any) => ({
-            name: item.name.length > 15 ? item.name.substring(0, 15) + "..." : item.name,
-            value: item.totalValue || 0,
-          }));
+    // Top items by value
+    const topItems = items
+      .sort((a, b) => (b.totalValue || 0) - (a.totalValue || 0))
+      .slice(0, 8)
+      .map((item) => ({
+        name: item.name.length > 15 ? item.name.substring(0, 15) + "..." : item.name,
+        value: item.totalValue || 0,
+      }));
 
-        // Stock levels
-        const stockLevels = items
-          .filter((item: any) => item.minimumStockLevel > 0)
-          .slice(0, 8)
-          .map((item: any) => ({
-            name: item.name.length > 15 ? item.name.substring(0, 15) + "..." : item.name,
-            current: item.totalQuantity || 0,
-            minimum: item.minimumStockLevel || 0,
-          }));
+    // Stock levels
+    const stockLevels = items
+      .filter((item) => item.minimumStockLevel > 0)
+      .slice(0, 8)
+      .map((item) => ({
+        name: item.name.length > 15 ? item.name.substring(0, 15) + "..." : item.name,
+        current: item.totalQuantity || 0,
+        minimum: item.minimumStockLevel || 0,
+      }));
 
-        setData({
-          valueByCategory,
-          itemsByCategory,
-          topItems,
-          stockLevels,
-          totalValue: items.reduce((sum: number, item: any) => sum + (item.totalValue || 0), 0),
-          totalItems: items.length,
-        });
-      }
-    } catch (err) {
-      console.error("Failed to fetch reports:", err);
-    } finally {
-      setLoading(false);
-    }
+    return {
+      valueByCategory,
+      itemsByCategory,
+      topItems,
+      stockLevels,
+      totalValue: items.reduce((sum, item) => sum + (item.totalValue || 0), 0),
+      totalItems: items.length,
+    };
   }, []);
 
   useEffect(() => {
-    fetchReports();
-  }, []);
+    loadReports()
+      .then(setData)
+      .catch((err) => console.error("Failed to fetch reports:", err))
+      .finally(() => setLoading(false));
+  }, [loadReports]);
 
   if (loading) {
     return (
@@ -193,7 +200,7 @@ export default function ReportsPage() {
                     outerRadius={100}
                     dataKey="value"
                   >
-                    {data.valueByCategory.map((_: any, index: number) => (
+                    {data.valueByCategory.map((_, index) => (
                       <Cell
                         key={`cell-${index}`}
                         fill={COLORS[index % COLORS.length]}
@@ -292,7 +299,7 @@ export default function ReportsPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {data.valueByCategory.map((cat: any, index: number) => {
+            {data.valueByCategory.map((cat, index) => {
               const pct = ((cat.value / data.totalValue) * 100).toFixed(1);
               return (
                 <div key={cat.name} className="flex items-center gap-4">

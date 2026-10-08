@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rate-limit";
 import {
@@ -36,11 +37,11 @@ export async function getAuthUser(): Promise<AuthUser | null> {
     const session = await auth();
     if (!session?.user) return null;
     return {
-      id: (session.user as any).id,
+      id: session.user.id,
       name: session.user.name || "",
       email: session.user.email || "",
-      role: (session.user as any).role || "",
-      farmId: (session.user as any).farmId ?? null,
+      role: session.user.role || "",
+      farmId: session.user.farmId ?? null,
     };
   } catch {
     return null;
@@ -212,8 +213,8 @@ export async function writeAuditLog(data: {
   action: string;
   entity: string;
   entityId?: string;
-  oldValues?: Record<string, any>;
-  newValues?: Record<string, any>;
+  oldValues?: Prisma.InputJsonObject;
+  newValues?: Prisma.InputJsonObject;
   ipAddress?: string;
 }) {
   try {

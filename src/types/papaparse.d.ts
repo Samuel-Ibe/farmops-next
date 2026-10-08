@@ -11,10 +11,10 @@ declare module "papaparse" {
     comments?: string;
     skipEmptyLines?: boolean | "greedy";
     download?: boolean;
-    transform?: (value: string, field: string | number) => any;
-    complete?: (results: ParseResult<any>, file?: string) => void;
+    transform?: (value: string, field: string | number) => unknown;
+    complete?: (results: ParseResult<unknown>, file?: string) => void;
     error?: (error: ParseError, file?: string) => void;
-    chunk?: (results: ParseResult<any>, parser: Parser) => void;
+    chunk?: (results: ParseResult<unknown>, parser: Parser) => void;
     fastMode?: boolean;
     beforeFirstChunk?: (chunk: string) => string | void;
     transformHeader?: (header: string) => string;
@@ -45,16 +45,17 @@ declare module "papaparse" {
     resume: () => void;
   }
 
-  function parse<T = any>(
+  function parse<T = unknown>(
     input: string | File | NodeJS.ReadableStream,
     config?: ParseConfig
   ): ParseResult<T>;
 
-  function parse<T = any>(
+  function parse(
     input: string | File | NodeJS.ReadableStream,
     config?: ParseConfig & { download: true }
   ): void;
 
   export { parse, ParseConfig, ParseResult, ParseError, Parser };
-  export default { parse };
+  const papa: { parse: typeof parse };
+  export default papa;
 }

@@ -4,12 +4,32 @@ import { useState, useEffect } from "react";
 import { FormDialog } from "@/components/shared/form-dialog";
 import { FormField } from "@/components/ui/form-field";
 import { FormSelect } from "@/components/ui/form-select";
+import type { Farm } from "@prisma/client";
+
+interface WarehouseFormValues {
+  id?: string;
+  name?: string | null;
+  farmId?: string | null;
+  location?: string | null;
+  type?: string | null;
+  capacity?: number | null;
+}
 
 interface WarehouseFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
-  initialData?: any;
+  initialData?: WarehouseFormValues | null;
+}
+
+function buildWarehouseForm(initialData?: WarehouseFormValues | null) {
+  return {
+    name: initialData?.name || "",
+    farmId: initialData?.farmId || "",
+    location: initialData?.location || "",
+    type: initialData?.type || "PHYSICAL",
+    capacity: initialData?.capacity?.toString() || "",
+  };
 }
 
 export function WarehouseForm({
@@ -18,37 +38,33 @@ export function WarehouseForm({
   onSuccess,
   initialData,
 }: WarehouseFormProps) {
-  const [farms, setFarms] = useState<any[]>([]);
-  const [form, setForm] = useState({
-    name: "",
-    farmId: "",
-    location: "",
-    type: "PHYSICAL",
-    capacity: "",
-  });
+  const [farms, setFarms] = useState<Farm[]>([]);
+  const [form, setForm] = useState(() => buildWarehouseForm(initialData));
 
   useEffect(() => {
     if (open) {
       fetch("/api/farms")
         .then((r) => r.json())
-        .then(setFarms)
+        .then((data: Farm[]) => setFarms(data))
         .catch(() => {});
     }
   }, [open]);
 
-  useEffect(() => {
-    if (initialData) {
-      setForm({
-        name: initialData.name || "",
-        farmId: initialData.farmId || "",
-        location: initialData.location || "",
-        type: initialData.type || "PHYSICAL",
-        capacity: initialData.capacity?.toString() || "",
-      });
-    } else {
-      setForm({ name: "", farmId: "", location: "", type: "PHYSICAL", capacity: "" });
-    }
-  }, [initialData, open]);
+  // Reset the form when the dialog opens or the edit target changes — state
+  // is adjusted during render instead of in an effect
+  // (react-hooks/set-state-in-effect).
+  const [prevProps, setPrevProps] = useState<{
+    initialData: WarehouseFormValues | null | undefined;
+    open: boolean;
+  } | null>(null);
+  if (
+    prevProps === null ||
+    prevProps.initialData !== initialData ||
+    prevProps.open !== open
+  ) {
+    setPrevProps({ initialData, open });
+    setForm(buildWarehouseForm(initialData));
+  }
 
   const handleSubmit = async () => {
     const url = initialData

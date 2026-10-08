@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -118,7 +118,7 @@ async function main() {
     },
   });
 
-  const tamaleCold = await prisma.warehouse.create({
+  await prisma.warehouse.create({
     data: {
       name: "Cold Storage",
       farmId: tamaleFarm.id,
@@ -163,7 +163,7 @@ async function main() {
   const toolsCategory = await prisma.category.create({
     data: { name: "Tools", icon: "🔧", color: "#6b7280" },
   });
-  const packagingCategory = await prisma.category.create({
+  await prisma.category.create({
     data: { name: "Packaging", icon: "📦", color: "#a855f7" },
   });
 
@@ -478,7 +478,7 @@ async function main() {
   });
 
   // Herbicide batch
-  const roundupBatch1 = await prisma.inventoryBatch.create({
+  await prisma.inventoryBatch.create({
     data: {
       itemId: herbicideRoundup.id,
       batchNumber: "ROUND-0826-001",
@@ -525,7 +525,7 @@ async function main() {
   });
 
   // Rice seeds batch
-  const riceBatch1 = await prisma.inventoryBatch.create({
+  await prisma.inventoryBatch.create({
     data: {
       itemId: riceSeeds.id,
       batchNumber: "RICE-0826-001",
@@ -806,7 +806,7 @@ async function main() {
   // ─── Seasons ─────────────────────────────────────────────
   console.log("Creating seasons...");
 
-  const majorSeason = await prisma.season.create({
+  await prisma.season.create({
     data: {
       name: "Major Season 2026",
       farmId: kumasiFarm.id,
@@ -817,7 +817,7 @@ async function main() {
     },
   });
 
-  const minorSeason = await prisma.season.create({
+  await prisma.season.create({
     data: {
       name: "Minor Season 2026",
       farmId: tamaleFarm.id,
@@ -854,7 +854,7 @@ async function main() {
     },
   });
 
-  const po2 = await prisma.purchaseOrder.create({
+  await prisma.purchaseOrder.create({
     data: {
       orderNumber: "PO-0826-0002",
       supplierId: northernSeeds.id,
@@ -874,7 +874,7 @@ async function main() {
     },
   });
 
-  const po3 = await prisma.purchaseOrder.create({
+  await prisma.purchaseOrder.create({
     data: {
       orderNumber: "PO-0826-0003",
       supplierId: fuelMaster.id,
@@ -892,7 +892,7 @@ async function main() {
     },
   });
 
-  const po4 = await prisma.purchaseOrder.create({
+  await prisma.purchaseOrder.create({
     data: {
       orderNumber: "PO-0826-0004",
       supplierId: ghanaFeeds.id,
@@ -994,7 +994,7 @@ async function main() {
   // ─── Audit Logs ─────────────────────────────────────────
   console.log("Creating audit logs...");
 
-  const auditData = [
+  const auditData: Prisma.AuditLogUncheckedCreateInput[] = [
     { userId: admin.id, action: "CREATE", entity: "InventoryItem", entityId: npk.id, newValues: { name: "NPK 15-15-15" } },
     { userId: admin.id, action: "CREATE", entity: "InventoryBatch", entityId: npkBatch1.id, newValues: { batchNumber: "NPK-0826-001", quantity: 50 } },
     { userId: admin.id, action: "CREATE", entity: "StockTransaction", entityId: npkBatch1.id, newValues: { type: "RECEIVED", quantity: 50 } },
@@ -1007,7 +1007,7 @@ async function main() {
   ];
 
   for (const log of auditData) {
-    await prisma.auditLog.create({ data: log as any });
+    await prisma.auditLog.create({ data: log });
   }
 
   console.log("  ✅ 10 audit logs created");

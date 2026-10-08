@@ -14,9 +14,7 @@ import {
   Activity,
   RefreshCw,
   Loader2,
-  Brain,
   Package,
-  ArrowDown,
   Clock,
   Zap,
   Target,
@@ -24,30 +22,50 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
+import type {
+  Forecast,
+  IntelligenceAnomaly,
+  IntelligenceResponse,
+  ReorderRecommendation,
+} from "@/app/api/intelligence/route";
 
 export default function IntelligencePage() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<IntelligenceResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("forecast");
   const { toast } = useToast();
 
-  const fetchIntelligence = useCallback(async () => {
+  // Data-only loader (no setState) so the effect below never reaches setState
+  // synchronously (react-hooks/set-state-in-effect).
+  const loadIntelligence = useCallback(async (): Promise<IntelligenceResponse> => {
+    const res = await fetch("/api/intelligence?analysis=all");
+    if (!res.ok) throw new Error("Intelligence request failed");
+    const payload: IntelligenceResponse = await res.json();
+    return payload;
+  }, []);
+
+  // Event-handler refresh (shows the spinner, surfaces the toast).
+  const refreshIntelligence = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/intelligence?analysis=all");
-      if (res.ok) {
-        setData(await res.json());
-      }
+      setData(await loadIntelligence());
     } catch (err) {
-      console.error("Failed to fetch intelligence data:", err);        toast("Failed to load forecast data", "error");
+      console.error("Failed to fetch intelligence data:", err);
+      toast("Failed to load forecast data", "error");
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [loadIntelligence, toast]);
 
   useEffect(() => {
-    fetchIntelligence();
-  }, [fetchIntelligence]);
+    loadIntelligence()
+      .then(setData)
+      .catch((err) => {
+        console.error("Failed to fetch intelligence data:", err);
+        toast("Failed to load forecast data", "error");
+      })
+      .finally(() => setLoading(false));
+  }, [loadIntelligence, toast]);
 
   if (loading) {
     return (
@@ -72,7 +90,7 @@ export default function IntelligencePage() {
       <div className="text-center py-20">
         <TrendingUp className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
         <p className="text-lg font-medium">No forecast data available</p>
-        <Button onClick={fetchIntelligence} variant="outline" className="mt-4">
+        <Button onClick={refreshIntelligence} variant="outline" className="mt-4">
           <RefreshCw className="h-4 w-4 mr-2" />
           Retry
         </Button>
@@ -83,12 +101,12 @@ export default function IntelligencePage() {
   const forecasts = data.forecasting || [];
   const reorderRecs = data.reorderRecommendations || [];
   const anomalies = data.anomalies || [];
-  const summary = data.summary || {};
+  const summary = data.summary;
 
-  const criticalCount = reorderRecs.filter((r: any) => r.urgency === "critical").length;
-  const warningCount = reorderRecs.filter((r: any) => r.urgency === "warning").length;
-  const highAnomalies = anomalies.filter((a: any) => a.severity === "critical" || a.severity === "high").length;
-  const itemsAtRisk = forecasts.filter((f: any) => f.monthsOfStockLeft < 3).length;
+  const criticalCount = reorderRecs.filter((r) => r.urgency === "critical").length;
+  const warningCount = reorderRecs.filter((r) => r.urgency === "warning").length;
+  const highAnomalies = anomalies.filter((a) => a.severity === "critical" || a.severity === "high").length;
+  const itemsAtRisk = forecasts.filter((f) => f.monthsOfStockLeft < 3).length;
 
   return (
     <div className="space-y-6">
@@ -96,7 +114,7 @@ export default function IntelligencePage() {
         title="Forecasting Engine"
         description="Weighted moving-average consumption forecasts, stock thresholds, and anomaly detection"
       >
-        <Button variant="outline" onClick={fetchIntelligence}>
+        <Button variant="outline" onClick={refreshIntelligence}>
           <RefreshCw className="h-4 w-4 mr-2" />
           Refresh Analysis
         </Button>
@@ -111,7 +129,7 @@ export default function IntelligencePage() {
                 <TrendingUp className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{summary.totalItems || 0}</p>
+                <p className="text-2xl font-bold">{summary?.totalItems || 0}</p>
                 <p className="text-xs text-muted-foreground">Items Tracked</p>
               </div>
             </div>
@@ -193,8 +211,8 @@ export default function IntelligencePage() {
               ) : (
                 <div className="space-y-3">
                   {forecasts
-                    .sort((a: any, b: any) => a.monthsOfStockLeft - b.monthsOfStockLeft)
-                    .map((f: any) => {
+                    .sort((a, b) => a.monthsOfStockLeft - b.monthsOfStockLeft)
+                    .map((f) => {
                       const riskLevel =
                         f.monthsOfStockLeft < 1 ? "critical" :
                         f.monthsOfStockLeft < 3 ? "warning" :
@@ -220,7 +238,7 @@ export default function IntelligencePage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {reorderRecs.filter((r: any) => r.urgency !== "none").length === 0 ? (
+              {reorderRecs.filter((r) => r.urgency !== "none").length === 0 ? (
                 <div className="text-center py-8">
                   <ShoppingCart className="h-10 w-10 mx-auto text-green-500 mb-3" />
                   <p className="font-medium">All items are well-stocked!</p>
@@ -229,8 +247,8 @@ export default function IntelligencePage() {
               ) : (
                 <div className="space-y-3">
                   {reorderRecs
-                    .filter((r: any) => r.urgency !== "none")
-                    .map((rec: any) => (
+                    .filter((r) => r.urgency !== "none")
+                    .map((rec) => (
                       <ReorderCard key={rec.itemId} rec={rec} />
                     ))}
                 </div>
@@ -257,7 +275,7 @@ export default function IntelligencePage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {anomalies.map((anomaly: any, i: number) => (
+                  {anomalies.map((anomaly, i) => (
                     <AnomalyCard key={i} anomaly={anomaly} />
                   ))}
                 </div>
@@ -272,7 +290,7 @@ export default function IntelligencePage() {
 
 // ─── Subcomponents ──────────────────────────────────────────
 
-function ForecastRow({ forecast, riskLevel }: { forecast: any; riskLevel: string }) {
+function ForecastRow({ forecast, riskLevel }: { forecast: Forecast; riskLevel: string }) {
   const [expanded, setExpanded] = useState(false);
 
   const riskColors: Record<string, { badge: string; bar: string; text: string }> = {
@@ -352,7 +370,7 @@ function ForecastRow({ forecast, riskLevel }: { forecast: any; riskLevel: string
   );
 }
 
-function ReorderCard({ rec }: { rec: any }) {
+function ReorderCard({ rec }: { rec: ReorderRecommendation }) {
   const urgencyStyles: Record<string, { bg: string; border: string; icon: string; badge: string }> = {
     critical: { bg: "bg-red-50/50", border: "border-red-200", icon: "text-red-600", badge: "bg-red-100 text-red-700" },
     warning: { bg: "bg-amber-50/50", border: "border-amber-200", icon: "text-amber-600", badge: "bg-amber-100 text-amber-700" },
@@ -397,7 +415,7 @@ function ReorderCard({ rec }: { rec: any }) {
           {rec.expiryWarnings?.length > 0 && (
             <div className="mt-3 rounded bg-amber-50 border border-amber-100 p-2">
               <p className="text-xs font-medium text-amber-800">⚠ Expiry warnings:</p>
-              {rec.expiryWarnings.map((w: any, i: number) => (
+              {rec.expiryWarnings.map((w, i) => (
                 <p key={i} className="text-xs text-amber-700">
                   Batch {w.batchNumber}: {w.quantityRemaining} {rec.unit} expires in {w.daysUntilExpiry} days
                 </p>
@@ -410,7 +428,7 @@ function ReorderCard({ rec }: { rec: any }) {
   );
 }
 
-function AnomalyCard({ anomaly }: { anomaly: any }) {
+function AnomalyCard({ anomaly }: { anomaly: IntelligenceAnomaly }) {
   const severityStyles: Record<string, { bg: string; border: string; icon: React.ReactNode; badge: string }> = {
     critical: {
       bg: "bg-red-50/50",

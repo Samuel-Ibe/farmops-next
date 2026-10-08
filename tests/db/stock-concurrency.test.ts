@@ -20,7 +20,6 @@ import { applyStockDelta } from "@/lib/stock";
 const DB_URL = process.env.DB_TEST_DATABASE_URL;
 
 if (!DB_URL) {
-  // eslint-disable-next-line no-console
   console.warn(
     "[stock-concurrency] DB_TEST_DATABASE_URL not set — skipping real-PostgreSQL tests. " +
       "Point it at a disposable database (prisma migrate deploy) to run them."

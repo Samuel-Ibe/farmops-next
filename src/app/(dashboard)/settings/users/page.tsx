@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import type { Prisma } from "@prisma/client";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,18 +33,35 @@ const ROLE_CONFIG: Record<string, { label: string; color: string; description: s
   ACCOUNTANT: { label: "Accountant", color: "bg-purple-50 text-purple-700 border-purple-200", description: "Views costs and financial reports" },
 };
 
+type ManagedUser = Prisma.UserGetPayload<{
+  select: {
+    id: true;
+    name: true;
+    email: true;
+    role: true;
+    isActive: true;
+    createdAt: true;
+    _count: {
+      select: {
+        performedTransactions: true;
+        requestedResources: true;
+        auditLogs: true;
+      };
+    };
+  };
+}>;
+
 export default function UsersPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => setHydrated(true), []);
-  const userRole = (session?.user as any)?.role || "FIELD_WORKER";
+  const hydrated = useHydrated();
+  const userRole = session?.user?.role || "FIELD_WORKER";
   const isAdmin = hydrated && userRole === "ADMIN";
 
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [editingUser, setEditingUser] = useState<any>(null);
+  const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
@@ -51,21 +70,33 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
+  // Data-only loader (no setState): the effect below never reaches setState
+  // synchronously (react-hooks/set-state-in-effect).
+  const loadUsers = useCallback(async () => {
+    const res = await fetch("/api/users");
+    if (!res.ok) throw new Error("Failed to fetch users");
+    const data: ManagedUser[] = await res.json();
+    return data;
+  }, []);
+
+  // Event-handler refresh (shows the spinner).
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/users");
-      if (res.ok) setUsers(await res.json());
+      setUsers(await loadUsers());
     } catch (err) {
       console.error("Failed to fetch users:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadUsers]);
 
   useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+    loadUsers()
+      .then(setUsers)
+      .catch((err) => console.error("Failed to fetch users:", err))
+      .finally(() => setLoading(false));
+  }, [loadUsers]);
 
   const filtered = users.filter(
     (u) =>
@@ -83,7 +114,7 @@ export default function UsersPage() {
     setShowForm(true);
   };
 
-  const openEdit = (user: any) => {
+  const openEdit = (user: ManagedUser) => {
     setEditingUser(user);
     setFormName(user.name);
     setFormEmail(user.email);
@@ -106,7 +137,13 @@ export default function UsersPage() {
     try {
       const url = editingUser ? `/api/users/${editingUser.id}` : "/api/auth/register";
       const method = editingUser ? "PUT" : "POST";
-      const body: any = {
+      const body: {
+        name: string;
+        email: string;
+        role: string;
+        password?: string;
+        confirmPassword?: string;
+      } = {
         name: formName.trim(),
         email: formEmail.trim(),
         role: formRole,
@@ -137,7 +174,7 @@ export default function UsersPage() {
     }
   };
 
-  const handleToggleActive = async (user: any) => {
+  const handleToggleActive = async (user: ManagedUser) => {
     try {
       const res = await fetch(`/api/users/${user.id}`, {
         method: "PATCH",

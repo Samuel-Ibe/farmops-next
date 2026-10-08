@@ -14,8 +14,9 @@ Measured on `master`, not estimated:
 
 | Metric | Value | Tool |
 |---|---|---|
-| Type coverage | **93.01%** (40,775 / 43,838) | `type-coverage` |
+| Type coverage | **98.26%** (43,230 / 43,992) | `type-coverage` |
 | TypeScript | `strict: true`, **0 errors** | `tsc --noEmit` |
+| ESLint | **0 errors**, 2 warnings (budget `--max-warnings 10`) — hard CI gate | `eslint .` |
 | Unit tests | **176 passing** (15 suites — incl. 93 adversarial security tests and 7 real-PostgreSQL concurrency/rollback/invariant tests) | Vitest |
 | E2E tests | **35 passing** — 13 route-level tenant-isolation attack scenarios, 17 API contract checks, 5 auth/UI | Playwright |
 | Branch coverage, `src/lib` | **92.5%** | `vitest --coverage` |

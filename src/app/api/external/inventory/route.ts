@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { BatchStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { authenticateExternal } from "@/lib/external-auth";
 
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
           category: { select: { id: true, name: true } },
           batches: {
             where: {
-              ...(status === "ALL" ? {} : { status: status as any }),
+              ...(status === "ALL" ? {} : { status: status as BatchStatus }),
               ...(keyFarmId ? { warehouse: { farmId: keyFarmId } } : {}),
             },
             select: {

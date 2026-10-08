@@ -5,6 +5,15 @@ import { FormDialog } from "@/components/shared/form-dialog";
 import { FormField } from "@/components/ui/form-field";
 import { FormSelect } from "@/components/ui/form-select";
 import { Textarea } from "@/components/ui/textarea";
+import type { Farm, InventoryBatch, User, Warehouse } from "@prisma/client";
+import type { InventoryItemWithTotals } from "@/app/api/inventory/route";
+
+type WarehouseWithFarm = Warehouse & { farm?: { name: string } | null };
+type SelectableBatch = InventoryBatch & {
+  itemName: string;
+  unitOfMeasure: string;
+};
+type OperatorOption = Pick<User, "id" | "name" | "role">;
 
 interface TransactionFormProps {
   open: boolean;
@@ -19,10 +28,10 @@ export function TransactionForm({
   onSuccess,
   type: initialType = "RECEIVED",
 }: TransactionFormProps) {
-  const [batches, setBatches] = useState<any[]>([]);
-  const [warehouses, setWarehouses] = useState<any[]>([]);
-  const [farms, setFarms] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
+  const [batches, setBatches] = useState<SelectableBatch[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseWithFarm[]>([]);
+  const [farms, setFarms] = useState<Farm[]>([]);
+  const [users, setUsers] = useState<OperatorOption[]>([]);
 
   const [form, setForm] = useState({
     type: initialType,
@@ -46,8 +55,8 @@ export function TransactionForm({
       ])
         .then(([inventoryItems, whData, farmData, userData]) => {
           // Flatten all batches from inventory items
-          const allBatches = inventoryItems.flatMap((item: any) =>
-            item.batches.map((b: any) => ({
+          const allBatches = (inventoryItems as InventoryItemWithTotals[]).flatMap((item) =>
+            item.batches.map((b) => ({
               ...b,
               itemName: item.name,
               unitOfMeasure: item.unitOfMeasure,
@@ -62,11 +71,14 @@ export function TransactionForm({
     }
   }, [open]);
 
-  useEffect(() => {
+  // Follow the `type` prop when it changes — state is adjusted during render
+  // instead of in an effect (react-hooks/set-state-in-effect).
+  const [prevType, setPrevType] = useState(initialType);
+  if (prevType !== initialType) {
+    setPrevType(initialType);
     setForm((prev) => ({ ...prev, type: initialType }));
-  }, [initialType]);
+  }
 
-  const showTransferFields = form.type === "TRANSFERRED";
   const showFromField = form.type === "ISSUED" || form.type === "TRANSFERRED";
   const showToField =
     form.type === "RECEIVED" || form.type === "TRANSFERRED";

@@ -21,7 +21,7 @@ export async function GET() {
   }
 }
 
-export async function PATCH(request: Request) {
+export async function PATCH() {
   try {
     const user = await requireAuth();
     if (user instanceof NextResponse) return user;

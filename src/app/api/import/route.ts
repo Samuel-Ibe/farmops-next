@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { TransactionType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import Papa from "papaparse";
 import { mutationGuard, resolveFarmScope } from "@/lib/api-auth";
@@ -120,9 +121,11 @@ export async function POST(request: Request) {
             });
             results.created++;
           }
-        } catch (err: any) {
+        } catch (err) {
           results.skipped++;
-          results.errors.push(`Row error: ${err.message}`);
+          results.errors.push(
+            `Row error: ${err instanceof Error ? err.message : "unknown error"}`
+          );
         }
       }
 
@@ -143,7 +146,6 @@ export async function POST(request: Request) {
       for (const row of rows) {
         try {
           const typeVal = row["Type"]?.trim();
-          const itemName = row["Item"]?.trim();
           const batchNumber = row["Batch Number"]?.trim();
           const quantity = parseFloat(row["Quantity"]);
 
@@ -200,7 +202,7 @@ export async function POST(request: Request) {
 
             await tx.stockTransaction.create({
               data: {
-                type: typeVal as any,
+                type: typeVal as TransactionType,
                 batchId: batch.id,
                 fromWarehouseId: fromWarehouseId || batch.warehouseId,
                 toWarehouseId: toWarehouseId,
@@ -227,9 +229,11 @@ export async function POST(request: Request) {
           }
 
           results.created++;
-        } catch (err: any) {
+        } catch (err) {
           results.skipped++;
-          results.errors.push(`Row error: ${err.message}`);
+          results.errors.push(
+            `Row error: ${err instanceof Error ? err.message : "unknown error"}`
+          );
         }
       }
 

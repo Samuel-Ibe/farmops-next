@@ -16,20 +16,17 @@ export async function GET(request: Request) {
       ...(farmId && { farmId }),
     };
 
-    const [records, total] = await Promise.all([
-      prisma.wasteRecord.findMany({
-        where,
-        include: {
-          batch: { include: { item: true, warehouse: true } },
-          reportedBy: { select: { name: true, role: true } },
-          farm: true,
-        },
-        orderBy: { reportedAt: "desc" },
-        skip: pagination.offset,
-        take: pagination.limit,
-      }),
-      prisma.wasteRecord.count({ where }),
-    ]);
+    const records = await prisma.wasteRecord.findMany({
+      where,
+      include: {
+        batch: { include: { item: true, warehouse: true } },
+        reportedBy: { select: { name: true, role: true } },
+        farm: true,
+      },
+      orderBy: { reportedAt: "desc" },
+      skip: pagination.offset,
+      take: pagination.limit,
+    });
 
     return cachedJsonResponse(records, 30);
   } catch (error) {

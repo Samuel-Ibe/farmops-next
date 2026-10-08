@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { cachedJsonResponse } from "@/lib/pagination";
 import { requireAuth, resolveFarmScope } from "@/lib/api-auth";
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
     const farmFilter = farmId ? { farmId } : {};
     const warehouseFarmFilter = farmId ? { warehouse: { farmId } } : {};
 
-    const txDateFilter: any = {};
+    const txDateFilter: { gte?: Date; lte?: Date } = {};
     if (startDate) txDateFilter.gte = new Date(startDate);
     if (endDate) txDateFilter.lte = new Date(endDate + "T23:59:59");
     const hasDateFilter = Object.keys(txDateFilter).length > 0;
@@ -48,7 +49,7 @@ export async function GET(request: Request) {
     }
 
     if (type === "transactions") {
-      const where: any = {};
+      const where: Prisma.StockTransactionWhereInput = {};
       if (hasDateFilter) where.createdAt = txDateFilter;
       if (farmId) where.farmId = farmId;
       const [txs, total] = await Promise.all([
@@ -74,9 +75,11 @@ export async function GET(request: Request) {
     }
 
     if (type === "waste") {
-      const wasteWhere: any = {};
-      if (startDate) wasteWhere.reportedAt = { gte: new Date(startDate) };
-      if (endDate) wasteWhere.reportedAt = { ...wasteWhere.reportedAt, lte: new Date(endDate + "T23:59:59") };
+      const wasteWhere: Prisma.WasteRecordWhereInput = {};
+      const wasteDateFilter: { gte?: Date; lte?: Date } = {};
+      if (startDate) wasteDateFilter.gte = new Date(startDate);
+      if (endDate) wasteDateFilter.lte = new Date(endDate + "T23:59:59");
+      if (startDate || endDate) wasteWhere.reportedAt = wasteDateFilter;
       if (farmId) wasteWhere.farmId = farmId;
       const records = await prisma.wasteRecord.findMany({ where: wasteWhere, include: { batch: { include: { item: true, warehouse: true } }, reportedBy: { select: { name: true } }, farm: true }, orderBy: { reportedAt: "desc" }, take: 200 });
       const byType: Record<string, number> = {}; const byFarm: Record<string, { quantity: number; value: number }> = {};

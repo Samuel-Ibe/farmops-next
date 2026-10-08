@@ -14,7 +14,7 @@ each claim. Nothing below is marked done without a passing check.
 | `tsc --noEmit` | 0 errors |
 | `vitest run` | **138/138 passing** (12 suites; 76 pre-existing + 62 new security/atomicity tests) |
 | `next build` | succeeds (middleware + 49 API routes + pages) |
-| `eslint .` | 249 pre-existing errors (mostly `no-explicit-any` legacy debt) — CI lint job marked non-blocking until Phase 4, see §7 |
+| `eslint .` | **0 errors**, 2 warnings (budget `--max-warnings 10`) — Phase 4 debt cleared; lint is a hard CI gate, see §7 |
 | Live smoke test | dev server: security headers present on pages *and* APIs; `/api/health` responds; login page renders with zero CSP violations |
 
 ---
@@ -127,14 +127,19 @@ dashboard page went from **7 parallel browser fetches + ~100 lines of
 client-side aggregation to a single request** (no client-supplied `farmId` at
 all).
 
-### DTO sweep / removing `any` from critical paths — **DEFERRED (Phase 4)**
+### DTO sweep / removing `any` from critical paths — **DONE (Phase 4, Oct 2026)**
 
-Not started: the frontend still passes Prisma-shaped objects into components.
-Honest baseline: `eslint` counts **206 `no-explicit-any` errors**, concentrated
-in `intelligence`, `inventory`, `reports` pages and shared forms. Until that
-sweep lands, the CI lint job runs non-blocking (see §7) while type-check,
-tests, build and E2E remain hard gates. Track with `type-coverage` (92.5%,
-up from 91.3% — the new modules are fully typed).
+The sweep landed across dashboard pages, shared forms/components and all API
+routes: `eslint .` reports **0 errors** (was 249 — 206 `no-explicit-any`, 38
+`react-hooks/set-state-in-effect`, plus empty-object/unescaped-entity debt)
+and only 2 advisory `no-img-element` warnings against a `--max-warnings 10`
+budget. The CI lint job is now a hard gate (`continue-on-error` removed) and
+branch protection on `master` requires all five checks. Session typing comes
+from `src/types/next-auth.d.ts`; mutating routes use
+`Prisma.*UpdateInput`/`WhereInput` instead of `Record<string, any>`; shared
+DTOs are exported from their route modules (dashboard, inventory,
+intelligence, reports). Track with `type-coverage`: **98.26%** (up from
+93.01%).
 
 ---
 
@@ -179,10 +184,10 @@ Job status expectations for the first real run:
 
 - **Type Check / Unit Tests / Build / Docker Build:** expected green (all
   verified locally).
-- **Lint:** expected red on pre-existing debt (249 errors, 106 warnings —
-  `no-explicit-any`, `react-hooks/set-state-in-effect` in legacy pages). The
-  job is marked `continue-on-error` with a pointer to this document; remove
-  that flag as Phase 4 progresses.
+- **Lint:** green — Phase 4 cleared the pre-existing debt (249 errors,
+  106 warnings → 0 errors, 2 warnings). The `continue-on-error` flag was
+  removed, so lint + type-check is a hard gate; `master` additionally has
+  branch protection requiring all five CI checks (applied to admins too).
 - **E2E:** runs against the CI Postgres service; the new security-header
   middleware and dashboard route are covered indirectly. Extend
   `tests/e2e/api.spec.ts` with the Farm A/B matrix next.
@@ -208,8 +213,8 @@ observability work.
 - [ ] Distributed rate limiting — deferred, SEC-18
 - [x] Hash API keys and enforce scopes
 - [x] Validate upload content using file signatures
-- [ ] Remove `any` from critical client paths — Phase 4 baseline captured (206)
-- [ ] Introduce typed DTOs — only the dashboard DTO exists so far
+- [x] Remove `any` from critical client paths — 0 `no-explicit-any` errors (was 206)
+- [x] Introduce typed DTOs — dashboard, inventory, intelligence and reports DTOs exported from their route modules
 - [x] Move dashboard aggregation server-side
 - [ ] Verify/fix Docker standalone deployment — image builds in CI; standalone output + container smoke test pending
 - [ ] Standardize on pnpm — open decision (§6)

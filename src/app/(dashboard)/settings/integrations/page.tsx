@@ -22,37 +22,77 @@ import {
   Trash2,
   RefreshCw,
   ExternalLink,
-  Eye,
-  EyeOff,
   Copy,
   Check,
 } from "lucide-react";
 
+interface WebhookEntry {
+  id: string;
+  url: string;
+  isActive: boolean;
+  events: string[];
+}
+
+interface DeliveryLogEntry {
+  success: boolean;
+  statusCode: number | null;
+  event: string;
+  durationMs: number;
+}
+
+interface ApiKeyEntry {
+  id: string;
+  name: string;
+  isActive: boolean;
+  keyPreview: string;
+  permissions: string[];
+  usageCount: number;
+  lastUsedAt: string | null;
+}
+
 // ─── Webhook Tab ───────────────────────────────────────
 function WebhooksTab() {
-  const [webhooks, setWebhooks] = useState<any[]>([]);
+  const [webhooks, setWebhooks] = useState<WebhookEntry[]>([]);
   const [events, setEvents] = useState<string[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [newUrl, setNewUrl] = useState("");
   const [newEvents, setNewEvents] = useState<string[]>(["*"]);
   const [loading, setLoading] = useState(true);
-  const [deliveryLogs, setDeliveryLogs] = useState<any[]>([]);
+  const [deliveryLogs, setDeliveryLogs] = useState<DeliveryLogEntry[]>([]);
 
+  // Data-only loader (no setState): the effect below never reaches setState
+  // synchronously (react-hooks/set-state-in-effect).
+  const loadWebhooks = useCallback(async () => {
+    const res = await fetch("/api/webhooks");
+    if (!res.ok) throw new Error("Failed to fetch webhooks");
+    const data: { webhooks?: WebhookEntry[]; availableEvents?: string[] } =
+      await res.json();
+    return { webhooks: data.webhooks || [], events: data.availableEvents || [] };
+  }, []);
+
+  // Event-handler refresh (shows the spinner).
   const fetchWebhooks = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/webhooks");
-      const data = await res.json();
-      setWebhooks(data.webhooks || []);
-      setEvents(data.availableEvents || []);
+      const result = await loadWebhooks();
+      setWebhooks(result.webhooks);
+      setEvents(result.events);
+    } catch (err) {
+      console.error("Failed to fetch webhooks:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadWebhooks]);
 
   useEffect(() => {
-    fetchWebhooks();
-  }, [fetchWebhooks]);
+    loadWebhooks()
+      .then((result) => {
+        setWebhooks(result.webhooks);
+        setEvents(result.events);
+      })
+      .catch((err) => console.error("Failed to fetch webhooks:", err))
+      .finally(() => setLoading(false));
+  }, [loadWebhooks]);
 
   const handleCreate = async () => {
     if (!newUrl) return;
@@ -74,7 +114,7 @@ function WebhooksTab() {
 
   const handleTest = async (id: string) => {
     const res = await fetch(`/api/webhooks/${id}`);
-    const data = await res.json();
+    const data: { logs?: DeliveryLogEntry[] } = await res.json();
     setDeliveryLogs(data.logs || []);
   };
 
@@ -114,7 +154,7 @@ function WebhooksTab() {
                     <span className="font-mono text-sm">{wh.url}</span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1">
-                    {wh.events.map((ev: string) => (
+                    {wh.events.map((ev) => (
                       <Badge key={ev} variant="outline" className="text-xs">
                         {ev}
                       </Badge>
@@ -210,7 +250,7 @@ function WebhooksTab() {
 
 // ─── API Keys Tab ──────────────────────────────────────
 function ApiKeysTab() {
-  const [keys, setKeys] = useState<any[]>([]);
+  const [keys, setKeys] = useState<ApiKeyEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
@@ -226,18 +266,33 @@ function ApiKeysTab() {
     "read:reports",
   ];
 
+  // Data-only loader (no setState): the effect below never reaches setState
+  // synchronously (react-hooks/set-state-in-effect).
+  const loadKeys = useCallback(async () => {
+    const res = await fetch("/api/api-keys");
+    if (!res.ok) throw new Error("Failed to fetch API keys");
+    const data: { apiKeys?: ApiKeyEntry[] } = await res.json();
+    return data.apiKeys || [];
+  }, []);
+
+  // Event-handler refresh (shows the spinner).
   const fetchKeys = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/api-keys");
-      const data = await res.json();
-      setKeys(data.apiKeys || []);
+      setKeys(await loadKeys());
+    } catch (err) {
+      console.error("Failed to fetch API keys:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadKeys]);
 
-  useEffect(() => { fetchKeys(); }, [fetchKeys]);
+  useEffect(() => {
+    loadKeys()
+      .then(setKeys)
+      .catch((err) => console.error("Failed to fetch API keys:", err))
+      .finally(() => setLoading(false));
+  }, [loadKeys]);
 
   const handleCreate = async () => {
     const res = await fetch("/api/api-keys", {
@@ -245,8 +300,8 @@ function ApiKeysTab() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: newName, permissions: newPermissions }),
     });
-    const data = await res.json();
-    setCreatedKey(data.key);
+    const data: { key?: string } = await res.json();
+    setCreatedKey(data.key ?? null);
     fetchKeys();
   };
 
@@ -315,7 +370,7 @@ function ApiKeysTab() {
                     {k.keyPreview}
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1">
-                    {k.permissions.map((p: string) => (
+                    {k.permissions.map((p) => (
                       <Badge key={p} variant="outline" className="text-[10px]">
                         {p}
                       </Badge>
@@ -375,14 +430,6 @@ function ApiKeysTab() {
 
 // ─── Email Tab ─────────────────────────────────────────
 function EmailTab() {
-  const [config, setConfig] = useState({
-    host: process.env.SMTP_HOST || "",
-    port: "587",
-    secure: false,
-    user: "",
-    pass: "",
-    from: "FarmOps <noreply@farmops.com>",
-  });
   const [testResult, setTestResult] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 

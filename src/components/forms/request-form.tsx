@@ -5,6 +5,11 @@ import { FormDialog } from "@/components/shared/form-dialog";
 import { FormField } from "@/components/ui/form-field";
 import { FormSelect } from "@/components/ui/form-select";
 import { Textarea } from "@/components/ui/textarea";
+import type { Farm, User } from "@prisma/client";
+import type { InventoryItemWithTotals } from "@/app/api/inventory/route";
+
+type WarehouseWithFarm = { id: string; name: string; farm?: { name: string } | null };
+type RequesterOption = Pick<User, "id" | "name" | "role">;
 
 interface RequestFormProps {
   open: boolean;
@@ -17,10 +22,10 @@ export function RequestForm({
   onOpenChange,
   onSuccess,
 }: RequestFormProps) {
-  const [items, setItems] = useState<any[]>([]);
-  const [warehouses, setWarehouses] = useState<any[]>([]);
-  const [farms, setFarms] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
+  const [items, setItems] = useState<InventoryItemWithTotals[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseWithFarm[]>([]);
+  const [farms, setFarms] = useState<Farm[]>([]);
+  const [users, setUsers] = useState<RequesterOption[]>([]);
 
   const [form, setForm] = useState({
     requestedById: "",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -46,6 +47,7 @@ interface AlertSummary {
 }
 
 export default function AlertsPage() {
+  const router = useRouter();
   const [alerts, setAlerts] = useState<{
     expiry: AlertItem[];
     lowStock: AlertItem[];
@@ -57,11 +59,25 @@ export default function AlertsPage() {
   const [activeTab, setActiveTab] = useState<"all" | "expiry" | "stock">("all");
   const [generating, setGenerating] = useState(false);
 
+  // Data-only loader: no setState before the first await, so the effect
+  // below can call it synchronously (react-hooks/set-state-in-effect).
+  const loadAlerts = useCallback(async () => {
+    const res = await fetch("/api/alerts?type=all&daysAhead=90");
+    return (await res.json()) as {
+      alerts: {
+        expiry: AlertItem[];
+        lowStock: AlertItem[];
+        criticalStock: AlertItem[];
+        expiringBatches: AlertItem[];
+      };
+      summary: AlertSummary;
+    };
+  }, []);
+
   const fetchAlerts = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/alerts?type=all&daysAhead=90");
-      const data = await res.json();
+      const data = await loadAlerts();
       setAlerts(data.alerts);
       setSummary(data.summary);
     } catch (error) {
@@ -69,11 +85,19 @@ export default function AlertsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadAlerts]);
 
   useEffect(() => {
-    fetchAlerts();
-  }, [fetchAlerts]);
+    void loadAlerts()
+      .then((data) => {
+        setAlerts(data.alerts);
+        setSummary(data.summary);
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to fetch alerts:", error);
+      })
+      .finally(() => setLoading(false));
+  }, [loadAlerts]);
 
   const generateNotifications = async () => {
     setGenerating(true);
@@ -389,7 +413,9 @@ export default function AlertsPage() {
                           variant="outline"
                           className="h-7 text-xs"
                           onClick={() =>
-                            (window.location.href = `/purchase-orders?create=true&itemId=${alert.id}`)
+                            router.push(
+                              `/purchase-orders?create=true&itemId=${alert.id}`
+                            )
                           }
                         >
                           <ShoppingCart className="mr-1 h-3 w-3" />

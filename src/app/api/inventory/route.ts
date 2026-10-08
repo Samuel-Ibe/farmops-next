@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { mutationGuard, writeAuditLog, getClientIp, requireAuth, resolveFarmScope } from "@/lib/api-auth";
 import { validate, createInventoryItemSchema } from "@/lib/api-validations";
-import { parsePaginationParams, paginatedResponse, cachedJsonResponse } from "@/lib/pagination";
+import { parsePaginationParams, cachedJsonResponse } from "@/lib/pagination";
+
+/** One inventory item plus derived totals — the shape GET returns. */
+export type InventoryItemWithTotals = Prisma.InventoryItemGetPayload<{
+  include: {
+    category: true;
+    batches: { include: { warehouse: { include: { farm: true } } } };
+    _count: { select: { batches: true } };
+  };
+}> & { totalQuantity: number; totalValue: number };
 
 export async function GET(request: Request) {
   try {
@@ -16,7 +26,7 @@ export async function GET(request: Request) {
 
     // If searching, don't paginate (return all matches for search dropdown)
     if (search || categoryId) {
-      const batchFilter: any = { status: "ACTIVE" };
+      const batchFilter: Prisma.InventoryBatchWhereInput = { status: "ACTIVE" };
       if (farmId) batchFilter.warehouse = { farmId };
       const items = await prisma.inventoryItem.findMany({
         where: {
@@ -36,7 +46,7 @@ export async function GET(request: Request) {
         take: 50,
       });
 
-      const itemsWithTotals = items.map((item) => ({
+      const itemsWithTotals: InventoryItemWithTotals[] = items.map((item) => ({
         ...item,
         totalQuantity: item.batches.reduce((sum, b) => sum + b.quantityRemaining, 0),
         totalValue: item.batches.reduce(
@@ -48,27 +58,24 @@ export async function GET(request: Request) {
     }
 
     // Paginated list
-    const batchFilter: any = { status: "ACTIVE" };
+    const batchFilter: Prisma.InventoryBatchWhereInput = { status: "ACTIVE" };
     if (farmId) batchFilter.warehouse = { farmId };
-    const [items, total] = await Promise.all([
-      prisma.inventoryItem.findMany({
-        where: { isActive: true },
-        include: {
-          category: true,
-          batches: {
-            where: batchFilter,
-            include: { warehouse: { include: { farm: true } } },
-          },
-          _count: { select: { batches: true } },
+    const items = await prisma.inventoryItem.findMany({
+      where: { isActive: true },
+      include: {
+        category: true,
+        batches: {
+          where: batchFilter,
+          include: { warehouse: { include: { farm: true } } },
         },
-        orderBy: { name: "asc" },
-        skip: pagination.offset,
-        take: pagination.limit,
-      }),
-      prisma.inventoryItem.count({ where: { isActive: true } }),
-    ]);
+        _count: { select: { batches: true } },
+      },
+      orderBy: { name: "asc" },
+      skip: pagination.offset,
+      take: pagination.limit,
+    });
 
-    const itemsWithTotals = items.map((item) => ({
+    const itemsWithTotals: InventoryItemWithTotals[] = items.map((item) => ({
       ...item,
       totalQuantity: item.batches.reduce((sum, b) => sum + b.quantityRemaining, 0),
       totalValue: item.batches.reduce(
