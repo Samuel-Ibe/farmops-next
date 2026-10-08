@@ -134,7 +134,7 @@ routes: `eslint .` reports **0 errors** (was 249 — 206 `no-explicit-any`, 38
 `react-hooks/set-state-in-effect`, plus empty-object/unescaped-entity debt)
 and only 2 advisory `no-img-element` warnings against a `--max-warnings 10`
 budget. The CI lint job is now a hard gate (`continue-on-error` removed) and
-branch protection on `master` requires all five checks. Session typing comes
+the `master-green-ci` ruleset requires all five checks on `master`. Session typing comes
 from `src/types/next-auth.d.ts`; mutating routes use
 `Prisma.*UpdateInput`/`WhereInput` instead of `Record<string, any>`; shared
 DTOs are exported from their route modules (dashboard, inventory,
@@ -186,8 +186,11 @@ Job status expectations for the first real run:
   verified locally).
 - **Lint:** green — Phase 4 cleared the pre-existing debt (249 errors,
   106 warnings → 0 errors, 2 warnings). The `continue-on-error` flag was
-  removed, so lint + type-check is a hard gate; `master` additionally has
-  branch protection requiring all five CI checks (applied to admins too).
+  removed, so lint + type-check is a hard gate; `master` additionally has the
+  `master-green-ci` ruleset requiring all five CI checks. Plain branch
+  protection was replaced because GitHub rejects direct pushes while required
+  checks are pending (GH006 — a new commit cannot already have check runs), so
+  the ruleset grants the repo owner an always push bypass instead.
 - **E2E:** runs against the CI Postgres service; the new security-header
   middleware and dashboard route are covered indirectly. Extend
   `tests/e2e/api.spec.ts` with the Farm A/B matrix next.

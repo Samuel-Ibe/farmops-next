@@ -21,7 +21,8 @@ lockfile). CI runs `pnpm install --frozen-lockfile` → `tsc --noEmit` →
 `eslint . --max-warnings 10` →
 `vitest run` (with a PostgreSQL service: unit **and** real-DB suites) →
 `next build` → Playwright e2e → Docker build + runtime smoke test. All five
-jobs are required status checks on `master` via branch protection.
+jobs are required status checks on `master` via the `master-green-ci`
+ruleset (owner push bypass keeps direct pushes working).
 
 ## 2. Current numbers (measured, not aspirational)
 
