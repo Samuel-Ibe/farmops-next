@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, writeAuditLog, getClientIp, mutationGuard } from "@/lib/api-auth";
 import { applyStockDelta, transactionTypeDelta } from "@/lib/stock";
 import { logRouteError } from "@/lib/logger";
+import { validate, updateTransactionSchema } from "@/lib/api-validations";
 
 export async function GET(
   request: Request,
@@ -50,7 +51,7 @@ export async function PATCH(
     if (user instanceof NextResponse) return user;
 
     const { id } = await params;
-    const body = await request.json();
+    const body: unknown = await request.json();
 
     const existing = await prisma.stockTransaction.findUnique({ where: { id } });
     if (!existing) {
@@ -63,15 +64,20 @@ export async function PATCH(
     }
 
     // Transactions are mostly immutable, but allow updating reason and referenceNumber
+    const validation = validate(updateTransactionSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
+    }
+    const { reason, referenceNumber, farmId } = validation.data;
     const allowedFields: {
       reason?: string;
       referenceNumber?: string;
       farmId?: string;
     } = {};
-    if (body.reason !== undefined) allowedFields.reason = body.reason;
-    if (body.referenceNumber !== undefined) allowedFields.referenceNumber = body.referenceNumber;
+    if (reason !== undefined) allowedFields.reason = reason;
+    if (referenceNumber !== undefined) allowedFields.referenceNumber = referenceNumber;
     // Re-stamping farmId is an admin-only correction
-    if (body.farmId !== undefined && user.role === "ADMIN") allowedFields.farmId = body.farmId;
+    if (farmId !== undefined && user.role === "ADMIN") allowedFields.farmId = farmId;
 
     if (Object.keys(allowedFields).length === 0) {
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });

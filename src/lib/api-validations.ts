@@ -112,11 +112,17 @@ export const createFarmSchema = z.object({
 
 export const updateFarmSchema = createFarmSchema.partial();
 
+/** PUT /api/farms — full update carries the target farm id in the body. */
+export const updateFarmWithIdSchema = updateFarmSchema.extend({
+  id: z.string().min(1, "Farm id is required"),
+});
+
 // ─── Warehouse ──────────────────────────────────────────────
 
 export const createWarehouseSchema = z.object({
   name: z.string().min(1, "Name is required").max(200),
-  farmId: z.string().min(1, "Farm is required"),
+  // Optional: non-admin creators are scoped to their own farm server-side
+  farmId: z.string().min(1, "Farm is required").optional(),
   location: z.string().max(500).optional(),
   type: z.enum(["PHYSICAL", "COLD_STORAGE", "VIRTUAL"]).default("PHYSICAL"),
   capacity: z.number().positive().optional(),
@@ -152,7 +158,7 @@ export const updateCategorySchema = createCategorySchema.partial();
 
 export const createSeasonSchema = z.object({
   name: z.string().min(1, "Name is required").max(200),
-  farmId: z.string().min(1, "Farm is required"),
+  farmId: z.string().min(1, "Farm is required").optional(),
   startDate: z.string().min(1, "Start date is required"),
   endDate: z.string().min(1, "End date is required"),
   cropType: z.string().max(200).optional(),
@@ -188,6 +194,119 @@ export const updateUserSchema = z.object({
 export const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(1, "Password is required"),
+});
+
+// ─── Auth: email verification & password reset ───────────────
+
+export const verifyEmailSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Invalid email address"),
+  code: z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit code from your email"),
+});
+
+export const resendVerificationSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Invalid email address"),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Token is required"),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .regex(/[A-Z]/, "Password must contain an uppercase letter")
+    .regex(/[a-z]/, "Password must contain a lowercase letter")
+    .regex(/[0-9]/, "Password must contain a number"),
+});
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Invalid email address"),
+});
+
+// ─── Batch Lifecycle ────────────────────────────────────────
+
+export const createBatchSchema = z.object({
+  itemId: z.string().min(1, "Item is required"),
+  batchNumber: z.string().min(1, "Batch number is required").max(100),
+  warehouseId: z.string().min(1, "Warehouse is required"),
+  supplierId: z.string().optional(),
+  quantityReceived: z.number().positive("Quantity must be positive").max(1000000),
+  purchasePrice: z.number().min(0).optional(),
+  manufactureDate: z.string().optional(),
+  expiryDate: z.string().optional(),
+  purchaseDate: z.string().optional(),
+});
+
+export const splitBatchSchema = z.object({
+  batchId: z.string().min(1, "Batch is required"),
+  splitQuantity: z.number().positive("splitQuantity must be positive"),
+  targetWarehouseId: z.string().optional(),
+  newBatchNumber: z.string().max(100).optional(),
+  notes: z.string().max(500).optional(),
+});
+
+export const transferBatchSchema = z.object({
+  batchId: z.string().min(1, "Batch is required"),
+  toWarehouseId: z.string().min(1, "Destination warehouse is required"),
+  quantity: z.number().positive("Quantity must be positive"),
+  notes: z.string().max(500).optional(),
+});
+
+// ─── Stock Count Patch ───────────────────────────────────────
+
+export const updateStockCountSchema = z.object({
+  status: z.enum(["IN_PROGRESS", "COMPLETED", "RECONCILED"]).optional(),
+  notes: z.string().max(500).optional(),
+  items: z.array(z.object({
+    id: z.string().min(1),
+    countedQuantity: z.number().min(0),
+    notes: z.string().max(200).optional(),
+  })).optional(),
+});
+
+// ─── Stock Transaction Patch ────────────────────────────────────────
+
+export const updateTransactionSchema = z.object({
+  reason: z.string().max(500).optional(),
+  referenceNumber: z.string().max(100).optional(),
+  farmId: z.string().min(1).optional(),
+});
+
+// ─── Alert Generation Run ───────────────────────────────
+
+export const createAlertRunSchema = z.object({
+  daysAhead: z.number().int().min(1).max(365).optional(),
+});
+
+// ─── Notification ───────────────────────────────────────
+
+export const updateNotificationSchema = z.object({
+  isRead: z.boolean().optional(),
+});
+
+// ─── Webhook ──────────────────────────────────────────────
+
+export const createWebhookSchema = z.object({
+  url: z.string().min(1, "URL is required"),
+  events: z.array(z.string().min(1)).min(1, "At least one event is required"),
+});
+
+export const updateWebhookSchema = z.object({
+  url: z.string().min(1).optional(),
+  events: z.array(z.string().min(1)).min(1).optional(),
+  isActive: z.boolean().optional(),
+});
+
+// ─── API Key ─────────────────────────────────────────────
+
+export const createApiKeySchema = z.object({
+  name: z.string().min(1, "Name is required").max(100),
+  permissions: z.array(z.string().min(1)).min(1, "At least one permission is required"),
+  farmId: z.string().min(1).optional(),
+});
+
+// ─── QR Code ─────────────────────────────────────────────
+
+export const generateQrSchema = z.object({
+  batchId: z.string().min(1, "Batch is required"),
 });
 
 // ─── Validation Helper ──────────────────────────────────────

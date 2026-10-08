@@ -46,7 +46,8 @@ export default function PurchaseOrdersPage() {
   const loadOrders = useCallback(async () => {
     const res = await fetch("/api/purchase-orders");
     if (!res.ok) throw new Error("Failed to fetch purchase orders");
-    const json = await res.json();
+    const json: { data?: PurchaseOrderWithRelations[] } | PurchaseOrderWithRelations[] | null =
+      await res.json();
     const data: PurchaseOrderWithRelations[] = Array.isArray(json)
       ? json
       : json?.data || [];
@@ -68,7 +69,7 @@ export default function PurchaseOrdersPage() {
   useEffect(() => {
     loadOrders()
       .then(setOrders)
-      .catch((err) => console.error("Failed to fetch purchase orders:", err))
+      .catch((err: unknown) => console.error("Failed to fetch purchase orders:", err))
       .finally(() => setLoading(false));
   }, [loadOrders]);
 
@@ -92,7 +93,7 @@ export default function PurchaseOrdersPage() {
         toast(`Order ${newStatus.toLowerCase()}`, "success");
         fetchOrders();
       } else {
-        const err = await res.json();
+        const err: { error?: string } = await res.json();
         toast(err.error || "Failed to update", "error");
       }
     } catch {

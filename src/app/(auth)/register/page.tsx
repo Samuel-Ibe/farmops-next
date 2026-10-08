@@ -63,7 +63,8 @@ export default function RegisterPage() {
         }),
       });
 
-      const data = await res.json();
+      const data: { error?: string; details?: string[]; devCode?: string } =
+        await res.json();
 
       if (!res.ok) {
         setError(data.error || "Registration failed");

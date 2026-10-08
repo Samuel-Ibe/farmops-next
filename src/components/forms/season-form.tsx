@@ -95,7 +95,7 @@ export function SeasonForm({ open, onOpenChange, initialData, onSuccess }: Seaso
         toast(initialData ? "Season updated" : "Season created", "success");
         onSuccess();
       } else {
-        const err = await res.json();
+        const err: { error?: string } = await res.json();
         toast(err.error || "Failed to save season", "error");
       }
     } catch {

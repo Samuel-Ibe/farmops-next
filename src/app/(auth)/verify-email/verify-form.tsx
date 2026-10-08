@@ -58,7 +58,7 @@ export default function VerifyEmailForm({
         body: JSON.stringify({ email, code }),
       });
 
-      const data = await res.json();
+      const data: { error?: string; message?: string } = await res.json();
 
       if (!res.ok) {
         setError(data.error || "Verification failed. Please try again.");
@@ -87,7 +87,8 @@ export default function VerifyEmailForm({
         body: JSON.stringify({ email }),
       });
 
-      const data = await res.json();
+      const data: { error?: string; message?: string; devCode?: string } =
+        await res.json();
 
       if (!res.ok) {
         setError(data.error || "Could not send a new code. Please try again.");
@@ -100,7 +101,7 @@ export default function VerifyEmailForm({
         setCode(data.devCode);
         setResendNote(`No SMTP configured, so your code is: ${data.devCode}`);
       } else {
-        setResendNote(data.message);
+        setResendNote(data.message ?? "");
       }
     } catch {
       setError("Network error. Please try again.");

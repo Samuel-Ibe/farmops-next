@@ -42,7 +42,7 @@ export default function NotificationsPage() {
   useEffect(() => {
     loadNotifications()
       .then(setNotifications)
-      .catch((err) => console.error("Failed to fetch notifications:", err))
+      .catch((err: unknown) => console.error("Failed to fetch notifications:", err))
       .finally(() => setLoading(false));
   }, [loadNotifications]);
 

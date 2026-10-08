@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { registerWebhook, listWebhooks, WEBHOOK_EVENTS } from "@/lib/webhooks";
 import { mutationGuard, requireAuth } from "@/lib/api-auth";
+import { validate, createWebhookSchema } from "@/lib/api-validations";
 
 /**
  * GET /api/webhooks
@@ -28,15 +29,12 @@ export async function POST(request: Request) {
     const user = await mutationGuard(request, { minRole: "ADMIN" });
     if (user instanceof NextResponse) return user;
 
-    const body = await request.json();
-    const { url, events } = body;
-
-    if (!url || !events || !Array.isArray(events) || events.length === 0) {
-      return NextResponse.json(
-        { error: "url and events[] are required" },
-        { status: 400 }
-      );
+    const body: unknown = await request.json();
+    const validation = validate(createWebhookSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
     }
+    const { url, events } = validation.data;
 
     // Validate URL + block SSRF targets (private/loopback/link-local hosts)
     let parsed: URL;

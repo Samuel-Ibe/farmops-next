@@ -1,5 +1,7 @@
 # FarmOps
 
+[![FarmOps CI/CD](https://github.com/Samuel-Ibe/farmops-next/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Samuel-Ibe/farmops-next/actions/workflows/ci.yml)
+
 **FarmOps helps medium-size farms reduce input waste and coordinate field operations across planting, maintenance, and harvest seasons.**
 
 It is the operational layer between the field and the store: what was ordered, what arrived, which lot went where, what got counted, what was wasted — scoped to one farm, auditable per action, usable by field staff on a phone.
@@ -10,11 +12,11 @@ Built for farms running 20–500 hectares across several plots in Ghana (GH₵, 
 
 ## Engineering metrics
 
-Measured on `master`, not estimated:
+Measured on `master`, not estimated. The badge above reflects all **six** CI checks required on `master` by the `master-green-ci` ruleset — Lint & Type Check, Type Coverage, Tests (unit + PostgreSQL), Build, E2E Tests, and Docker Build & Smoke Test; the run (and badge) is green only when every one passes:
 
 | Metric | Value | Tool |
 |---|---|---|
-| Type coverage | **98.26%** (43,230 / 43,992) | `type-coverage` |
+| Type coverage | **99.51%** (43,372 / 43,583) — hard CI gate (`Type Coverage` job) | `type-coverage` |
 | TypeScript | `strict: true`, **0 errors** | `tsc --noEmit` |
 | ESLint | **0 errors**, 2 warnings (budget `--max-warnings 10`) — hard CI gate | `eslint .` |
 | Unit tests | **176 passing** (15 suites — incl. 93 adversarial security tests and 7 real-PostgreSQL concurrency/rollback/invariant tests) | Vitest |
@@ -36,7 +38,7 @@ Measured on `master`, not estimated:
 | Health endpoint | `GET /api/health` (DB probe, 200/503) | deployment checks |
 | Raw SQL / `dangerouslySetInnerHTML` | **0 / 0** | grep |
 
-Honest gaps (they're tracked, not hidden): statement coverage across `src/lib` is 27.5% — the tested modules are covered well, but whole modules (`api-auth`, `validations`, `audit`, `auth`) still have no unit tests; route handlers are covered at the HTTP boundary (tenant E2E) rather than by handler-level unit tests. See [docs/testing.md](docs/testing.md) §2. The full hardening status — including deferred items like distributed rate limiting and the DTO/`any` sweep — is mapped recommendation-by-recommendation in [docs/PRODUCTION_ELEVATION.md](docs/PRODUCTION_ELEVATION.md); the next engineering phases live in [docs/ROADMAP.md](docs/ROADMAP.md).
+Honest gaps (they're tracked, not hidden): statement coverage across `src/lib` is 27.5% — the tested modules are covered well, but whole modules (`api-auth`, `validations`, `audit`, `auth`) still have no unit tests; route handlers are covered at the HTTP boundary (tenant E2E) rather than by handler-level unit tests. See [docs/testing.md](docs/testing.md) §2. The full hardening status — including completed phases (the DTO/`any` sweep and zod validation of every API request body are done) and deferred items like distributed rate limiting — is mapped recommendation-by-recommendation in [docs/PRODUCTION_ELEVATION.md](docs/PRODUCTION_ELEVATION.md); the next engineering phases live in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ---
 

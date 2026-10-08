@@ -46,7 +46,10 @@ interface SearchableSupplier {
 /** Unwrap an array that may be nested under `data` (paginated responses). */
 function extractRows<T>(res: unknown): T[] {
   if (Array.isArray(res)) return res as T[];
-  const nested = (res as { data?: unknown } | null)?.data;
+  const nested =
+    typeof res === "object" && res !== null && "data" in res
+      ? res.data
+      : undefined;
   return Array.isArray(nested) ? (nested as T[]) : [];
 }
 
@@ -107,8 +110,8 @@ export function GlobalSearch() {
     setLoading(true);
     try {
       const [inventoryRes, suppliersRes] = await Promise.all([
-        fetch(`/api/inventory?search=${encodeURIComponent(q)}`).then((r) => r.json()).catch(() => []),
-        fetch(`/api/suppliers`).then((r) => r.json()).catch(() => []),
+        fetch(`/api/inventory?search=${encodeURIComponent(q)}`).then<unknown>((r) => r.json()).catch(() => []),
+        fetch(`/api/suppliers`).then<unknown>((r) => r.json()).catch(() => []),
       ]);
 
       const items: SearchResult[] = [];

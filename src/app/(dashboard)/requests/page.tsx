@@ -42,7 +42,8 @@ export default function RequestsPage() {
     if (status) params.set("status", status);
     const res = await fetch(`/api/requests?${params}`);
     if (!res.ok) throw new Error("Failed to fetch requests");
-    const json = await res.json();
+    const json: { data?: RequestWithRelations[] } | RequestWithRelations[] | null =
+      await res.json();
     const data: RequestWithRelations[] = Array.isArray(json)
       ? json
       : json?.data || [];
@@ -64,7 +65,7 @@ export default function RequestsPage() {
   useEffect(() => {
     loadRequests("")
       .then(setRequests)
-      .catch((err) => console.error("Failed to fetch requests:", err))
+      .catch((err: unknown) => console.error("Failed to fetch requests:", err))
       .finally(() => setLoading(false));
   }, [loadRequests]);
 
@@ -88,7 +89,7 @@ export default function RequestsPage() {
         toast("Request approved and stock issued", "success");
         fetchRequests();
       } else {
-        const err = await res.json();
+        const err: { error?: string } = await res.json();
         toast(err.error || "Failed to approve request", "error");
       }
     } catch {
@@ -110,7 +111,7 @@ export default function RequestsPage() {
         toast("Request rejected", "success");
         fetchRequests();
       } else {
-        const err = await res.json();
+        const err: { error?: string } = await res.json();
         toast(err.error || "Failed to reject request", "error");
       }
     } catch {

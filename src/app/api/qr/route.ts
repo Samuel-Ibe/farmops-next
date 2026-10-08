@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mutationGuard, requireAuth, resolveFarmScope } from "@/lib/api-auth";
+import { validate, generateQrSchema } from "@/lib/api-validations";
 
 export async function GET(request: Request) {
   try {
@@ -140,8 +141,12 @@ export async function POST(request: Request) {
   try {
     const guard = await mutationGuard(request, { minRole: "WAREHOUSE_MANAGER" });
     if (guard instanceof NextResponse) return guard;
-    const body = await request.json();
-    const { batchId } = body;
+    const body: unknown = await request.json();
+    const validation = validate(generateQrSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
+    }
+    const { batchId } = validation.data;
 
     // Generate QR code data for a batch
     const batch = await prisma.inventoryBatch.findUnique({

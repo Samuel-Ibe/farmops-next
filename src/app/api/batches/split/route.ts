@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { mutationGuard, writeAuditLog, getClientIp, resolveFarmScope, withIdempotency } from "@/lib/api-auth";
 import { applyStockDelta } from "@/lib/stock";
 import { logRouteError } from "@/lib/logger";
+import { validate, splitBatchSchema } from "@/lib/api-validations";
 
 /**
  * POST /api/batches/split
@@ -23,15 +24,12 @@ export async function POST(request: Request) {
     if (user instanceof NextResponse) return user;
     const farmScope = resolveFarmScope(user);
 
-    const body = await request.json();
-    const { batchId, splitQuantity, targetWarehouseId, newBatchNumber, notes } = body;
-
-    if (!batchId || !splitQuantity || splitQuantity <= 0) {
-      return NextResponse.json(
-        { error: "batchId and positive splitQuantity are required" },
-        { status: 400 }
-      );
+    const body: unknown = await request.json();
+    const validation = validate(splitBatchSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
     }
+    const { batchId, splitQuantity, targetWarehouseId, newBatchNumber, notes } = validation.data;
 
     return await withIdempotency(request, `POST /api/batches/split:${user.id}`, async () => {
     const sourceBatch = await prisma.inventoryBatch.findUnique({

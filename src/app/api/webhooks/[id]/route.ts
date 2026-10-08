@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getWebhook, updateWebhook, unregisterWebhook, getDeliveryLogs } from "@/lib/webhooks";
 import { mutationGuard } from "@/lib/api-auth";
+import { validate, updateWebhookSchema } from "@/lib/api-validations";
 
 /**
  * GET /api/webhooks/:id
@@ -37,8 +38,12 @@ export async function PATCH(
     if (user instanceof NextResponse) return user;
 
     const { id } = await params;
-    const body = await request.json();
-    const webhook = updateWebhook(id, body);
+    const body: unknown = await request.json();
+    const validation = validate(updateWebhookSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
+    }
+    const webhook = updateWebhook(id, validation.data);
 
     if (!webhook) {
       return NextResponse.json({ error: "Webhook not found" }, { status: 404 });

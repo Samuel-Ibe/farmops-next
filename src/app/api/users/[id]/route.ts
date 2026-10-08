@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRole, writeAuditLog, getClientIp } from "@/lib/api-auth";
+import { validate, updateUserSchema } from "@/lib/api-validations";
 
 export async function PATCH(
   request: Request,
@@ -12,10 +13,15 @@ export async function PATCH(
     if (admin instanceof NextResponse) return admin;
 
     const { id } = await params;
-    const body = await request.json();
+    const body: unknown = await request.json();
+    const validation = validate(updateUserSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
+    }
+    const data = validation.data;
 
     // Prevent admins from demoting themselves
-    if (id === admin.id && body.role && body.role !== "ADMIN") {
+    if (id === admin.id && data.role && data.role !== "ADMIN") {
       return NextResponse.json(
         { error: "Admins cannot demote themselves" },
         { status: 400 }
@@ -31,9 +37,9 @@ export async function PATCH(
     const user = await prisma.user.update({
       where: { id },
       data: {
-        ...(body.isActive !== undefined && { isActive: body.isActive }),
-        ...(body.role && { role: body.role }),
-        ...(body.name && { name: body.name }),
+        ...(data.isActive !== undefined && { isActive: data.isActive }),
+        ...(data.role && { role: data.role }),
+        ...(data.name && { name: data.name }),
       },
       select: {
         id: true,
@@ -71,8 +77,12 @@ export async function PUT(
     if (admin instanceof NextResponse) return admin;
 
     const { id } = await params;
-    const body = await request.json();
-    const { name, role } = body;
+    const body: unknown = await request.json();
+    const validation = validate(updateUserSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
+    }
+    const { name, role } = validation.data;
 
     // Only admins can change roles
     if (role && admin.role !== "ADMIN") {

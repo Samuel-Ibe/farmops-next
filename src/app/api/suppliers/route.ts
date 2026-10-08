@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mutationGuard, requireAuth } from "@/lib/api-auth";
+import { validate, createSupplierSchema } from "@/lib/api-validations";
 
 export async function GET() {
   try {
@@ -28,8 +29,12 @@ export async function POST(request: Request) {
   try {
     const guard = await mutationGuard(request, { minRole: "FARM_MANAGER" });
     if (guard instanceof NextResponse) return guard;
-    const body = await request.json();
-    const { name, contactPerson, phone, email, address, rating } = body;
+    const body: unknown = await request.json();
+    const validation = validate(createSupplierSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
+    }
+    const { name, contactPerson, phone, email, address, rating } = validation.data;
 
     const supplier = await prisma.supplier.create({
       data: { name, contactPerson, phone, email, address, rating },

@@ -87,7 +87,7 @@ export function CsvIO({ open, onOpenChange, type, onSuccess }: CsvIOProps) {
       formData.append("type", type);
 
       const res = await fetch("/api/import", { method: "POST", body: formData });
-      const data = await res.json();
+      const data: CsvResult & { error?: string } = await res.json();
 
       if (!res.ok) {
         throw new Error(data.error || "Import failed");
@@ -95,7 +95,7 @@ export function CsvIO({ open, onOpenChange, type, onSuccess }: CsvIOProps) {
 
       setResult(data);
       setMode("result");
-      toast(data.message, "success");
+      toast(data.message || "Import complete", "success");
       onSuccess?.();
     } catch (err) {
       setResult({

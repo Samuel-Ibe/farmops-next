@@ -67,7 +67,7 @@ export default function QRPage() {
 
   useEffect(() => {
     fetch("/api/inventory")
-      .then((r) => r.json())
+      .then<{ data?: InventoryItemWithTotals[] } | InventoryItemWithTotals[]>((r) => r.json())
       .then((res) => setItems(Array.isArray(res) ? res : res?.data || []))
       .catch(() => {});
   }, []);

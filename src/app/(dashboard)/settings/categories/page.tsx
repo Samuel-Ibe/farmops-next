@@ -67,7 +67,7 @@ export default function CategoriesPage() {
   useEffect(() => {
     loadCategories()
       .then(setCategories)
-      .catch((err) => console.error("Failed to fetch categories:", err))
+      .catch((err: unknown) => console.error("Failed to fetch categories:", err))
       .finally(() => setLoading(false));
   }, [loadCategories]);
 
@@ -113,7 +113,7 @@ export default function CategoriesPage() {
         setShowForm(false);
         fetchCategories();
       } else {
-        const err = await res.json();
+        const err: { error?: string } = await res.json();
         toast(err.error || "Failed to save category", "error");
       }
     } catch {
@@ -132,7 +132,7 @@ export default function CategoriesPage() {
         setDeleteTarget(null);
         fetchCategories();
       } else {
-        const err = await res.json();
+        const err: { error?: string } = await res.json();
         toast(err.error || "Failed to delete", "error");
       }
     } catch {

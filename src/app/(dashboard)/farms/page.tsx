@@ -59,7 +59,7 @@ export default function FarmsPage() {
   useEffect(() => {
     loadFarms()
       .then(setFarms)
-      .catch((err) => console.error("Failed to fetch farms:", err))
+      .catch((err: unknown) => console.error("Failed to fetch farms:", err))
       .finally(() => setLoading(false));
   }, [loadFarms]);
 
@@ -71,7 +71,7 @@ export default function FarmsPage() {
       setDeleteTarget(null);
       fetchFarms();
     } else {
-      const err = await res.json();
+      const err: { error?: string } = await res.json();
       toast(err.error || "Failed to delete farm", "error");
     }
   };

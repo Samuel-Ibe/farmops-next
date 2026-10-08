@@ -60,7 +60,7 @@ export default function IntelligencePage() {
   useEffect(() => {
     loadIntelligence()
       .then(setData)
-      .catch((err) => {
+      .catch((err: unknown) => {
         console.error("Failed to fetch intelligence data:", err);
         toast("Failed to load forecast data", "error");
       })

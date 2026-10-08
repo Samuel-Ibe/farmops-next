@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mutationGuard } from "@/lib/api-auth";
+import { validate, updateSupplierSchema } from "@/lib/api-validations";
 
 export async function PATCH(
   request: Request,
@@ -10,8 +11,12 @@ export async function PATCH(
     const guard = await mutationGuard(request, { minRole: "FARM_MANAGER" });
     if (guard instanceof NextResponse) return guard;
     const { id } = await params;
-    const body = await request.json();
-    const { name, contactPerson, email, phone, address, rating } = body;
+    const body: unknown = await request.json();
+    const validation = validate(updateSupplierSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
+    }
+    const { name, contactPerson, email, phone, address, rating } = validation.data;
 
     const supplier = await prisma.supplier.update({
       where: { id },

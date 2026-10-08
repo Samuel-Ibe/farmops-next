@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mutationGuard, requireAuth, resolveFarmScope } from "@/lib/api-auth";
+import { validate, createBatchSchema } from "@/lib/api-validations";
 
 export async function GET(request: Request) {
   try {
@@ -39,7 +40,11 @@ export async function POST(request: Request) {
   try {
     const guard = await mutationGuard(request, { minRole: "WAREHOUSE_MANAGER" });
     if (guard instanceof NextResponse) return guard;
-    const body = await request.json();
+    const body: unknown = await request.json();
+    const validation = validate(createBatchSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
+    }
     const {
       itemId,
       batchNumber,
@@ -50,7 +55,7 @@ export async function POST(request: Request) {
       manufactureDate,
       expiryDate,
       purchaseDate,
-    } = body;
+    } = validation.data;
 
     // Check for duplicate batch number
     const existing = await prisma.inventoryBatch.findFirst({

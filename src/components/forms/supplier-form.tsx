@@ -74,7 +74,7 @@ export function SupplierForm({
     });
 
     if (!res.ok) {
-      const err = await res.json();
+      const err: { error?: string } = await res.json();
       throw new Error(err.error || "Failed to save supplier");
     }
 

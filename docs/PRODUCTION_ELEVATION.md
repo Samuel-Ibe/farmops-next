@@ -134,12 +134,13 @@ routes: `eslint .` reports **0 errors** (was 249 — 206 `no-explicit-any`, 38
 `react-hooks/set-state-in-effect`, plus empty-object/unescaped-entity debt)
 and only 2 advisory `no-img-element` warnings against a `--max-warnings 10`
 budget. The CI lint job is now a hard gate (`continue-on-error` removed) and
-the `master-green-ci` ruleset requires all five checks on `master`. Session typing comes
+the `master-green-ci` ruleset requires all six checks on `master` (the five
+Phase-4 checks plus the `Type Coverage` floor). Session typing comes
 from `src/types/next-auth.d.ts`; mutating routes use
 `Prisma.*UpdateInput`/`WhereInput` instead of `Record<string, any>`; shared
 DTOs are exported from their route modules (dashboard, inventory,
-intelligence, reports). Track with `type-coverage`: **98.26%** (up from
-93.01%).
+intelligence, reports). Track with `type-coverage`: **99.51%** (up from
+93.01%) — enforced as a hard gate in its own `typecov` CI job.
 
 ---
 

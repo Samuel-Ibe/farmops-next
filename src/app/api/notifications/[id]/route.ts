@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/api-auth";
+import { validate, updateNotificationSchema } from "@/lib/api-validations";
 
 export async function GET(
   request: Request,
@@ -45,7 +46,12 @@ export async function PATCH(
     }
 
     const { id } = await params;
-    const body = await request.json();
+    const body: unknown = await request.json();
+    const validation = validate(updateNotificationSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
+    }
+    const { isRead } = validation.data;
 
     const existing = await prisma.notification.findUnique({ where: { id } });
     if (!existing) {
@@ -59,8 +65,8 @@ export async function PATCH(
 
     const updateData: { isRead?: boolean } = {};
 
-    if (body.isRead !== undefined) {
-      updateData.isRead = body.isRead;
+    if (isRead !== undefined) {
+      updateData.isRead = isRead;
     }
 
     if (Object.keys(updateData).length === 0) {

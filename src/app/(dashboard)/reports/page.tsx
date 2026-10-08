@@ -46,7 +46,8 @@ export default function ReportsPage() {
     // Fetch inventory items to compute reports client-side
     const res = await fetch("/api/inventory");
     if (!res.ok) throw new Error("Failed to fetch reports");
-    const json = await res.json();
+    const json: { data?: InventoryItemWithTotals[] } | InventoryItemWithTotals[] | null =
+      await res.json();
     const items: InventoryItemWithTotals[] = Array.isArray(json)
       ? json
       : json?.data || [];
@@ -105,7 +106,7 @@ export default function ReportsPage() {
   useEffect(() => {
     loadReports()
       .then(setData)
-      .catch((err) => console.error("Failed to fetch reports:", err))
+      .catch((err: unknown) => console.error("Failed to fetch reports:", err))
       .finally(() => setLoading(false));
   }, [loadReports]);
 

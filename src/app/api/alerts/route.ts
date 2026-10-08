@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cachedJsonResponse } from "@/lib/pagination";
 import { mutationGuard, requireAuth, resolveFarmScope } from "@/lib/api-auth";
+import { validate, createAlertRunSchema } from "@/lib/api-validations";
 
 export interface AlertItem {
   id: string;
@@ -80,7 +81,7 @@ export async function GET(request: Request) {
 
       alerts.expiringBatches = expiringBatches.map((batch) => {
         const daysUntilExpiry = Math.ceil(
-          (new Date(batch.expiryDate!).getTime() - now.getTime()) /
+          ((batch.expiryDate?.getTime() ?? 0) - now.getTime()) /
             (1000 * 60 * 60 * 24)
         );
         const urgency =
@@ -234,8 +235,12 @@ export async function POST(request: Request) {
   try {
     const guard = await mutationGuard(request, { minRole: "WAREHOUSE_MANAGER" });
     if (guard instanceof NextResponse) return guard;
-    const body = await request.json().catch(() => ({}));
-    const daysAhead = body.daysAhead || 30;
+    const raw: unknown = await request.json().catch(() => ({}));
+    const validation = validate(createAlertRunSchema, raw);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
+    }
+    const daysAhead = validation.data.daysAhead ?? 30;
     const now = new Date();
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + daysAhead);
@@ -267,7 +272,7 @@ export async function POST(request: Request) {
 
     for (const batch of expiringBatches) {
       const daysUntilExpiry = Math.ceil(
-        (new Date(batch.expiryDate!).getTime() - now.getTime()) /
+        ((batch.expiryDate?.getTime() ?? 0) - now.getTime()) /
           (1000 * 60 * 60 * 24)
       );
 

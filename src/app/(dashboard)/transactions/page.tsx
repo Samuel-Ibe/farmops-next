@@ -47,7 +47,8 @@ export default function TransactionsPage() {
     if (type) params.set("type", type);
     const res = await fetch(`/api/transactions?${params}`);
     if (!res.ok) throw new Error("Failed to fetch transactions");
-    const json = await res.json();
+    const json: { data?: TransactionWithRelations[] } | TransactionWithRelations[] | null =
+      await res.json();
     const data: TransactionWithRelations[] = Array.isArray(json)
       ? json
       : json?.data || [];
@@ -69,7 +70,7 @@ export default function TransactionsPage() {
   useEffect(() => {
     loadTransactions("")
       .then(setTransactions)
-      .catch((err) => console.error("Failed to fetch transactions:", err))
+      .catch((err: unknown) => console.error("Failed to fetch transactions:", err))
       .finally(() => setLoading(false));
   }, [loadTransactions]);
 

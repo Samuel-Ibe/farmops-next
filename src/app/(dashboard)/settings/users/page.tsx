@@ -94,7 +94,7 @@ export default function UsersPage() {
   useEffect(() => {
     loadUsers()
       .then(setUsers)
-      .catch((err) => console.error("Failed to fetch users:", err))
+      .catch((err: unknown) => console.error("Failed to fetch users:", err))
       .finally(() => setLoading(false));
   }, [loadUsers]);
 
@@ -164,7 +164,7 @@ export default function UsersPage() {
         setShowForm(false);
         fetchUsers();
       } else {
-        const err = await res.json();
+        const err: { error?: string } = await res.json();
         toast(err.error || "Failed to save user", "error");
       }
     } catch {

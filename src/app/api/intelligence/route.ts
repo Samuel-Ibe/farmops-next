@@ -120,18 +120,19 @@ async function computeForecasting(): Promise<Forecast[]> {
     if (!itemId) continue;
 
     const monthKey = tx.createdAt.toISOString().slice(0, 7); // YYYY-MM
-    if (!consumptionByItem.has(itemId)) {
-      consumptionByItem.set(itemId, new Array(6).fill(0));
+    let arr = consumptionByItem.get(itemId);
+    if (!arr) {
+      arr = new Array<number>(6).fill(0);
+      consumptionByItem.set(itemId, arr);
     }
     const monthsAgo = 5 - Math.floor((Date.now() - new Date(monthKey + "-01").getTime()) / (30 * 24 * 60 * 60 * 1000));
     const idx = Math.max(0, Math.min(5, monthsAgo));
-    const arr = consumptionByItem.get(itemId)!;
     arr[idx] += tx.quantity;
   }
 
   // Forecast next 3 months using weighted moving average
   const forecasts = items.map((item) => {
-    const monthlyUsage = consumptionByItem.get(item.id) || new Array(6).fill(0);
+    const monthlyUsage = consumptionByItem.get(item.id) || new Array<number>(6).fill(0);
     const totalRemaining = item.batches.reduce((s, b) => s + b.quantityRemaining, 0);
 
     // Weights: more recent months have higher weight
@@ -200,7 +201,7 @@ async function computeReorderRecommendations(): Promise<ReorderRecommendation[]>
       .filter((b) => b.expiryDate)
       .map((b) => {
         const daysUntilExpiry = Math.ceil(
-          (new Date(b.expiryDate!).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+          ((b.expiryDate?.getTime() ?? 0) - Date.now()) / (1000 * 60 * 60 * 24)
         );
         return {
           batchNumber: b.batchNumber,
@@ -267,9 +268,11 @@ async function computeAnomalies(): Promise<IntelligenceAnomaly[]> {
     if (!itemId) continue;
     const month = tx.createdAt.toISOString().slice(0, 7);
     const key = `${itemId}`;
-    if (!monthlyByItem.has(key)) monthlyByItem.set(key, []);
-
-    const months = monthlyByItem.get(key)!;
+    let months = monthlyByItem.get(key);
+    if (!months) {
+      months = [];
+      monthlyByItem.set(key, months);
+    }
     let existing = months.find((m) => m.month === month);
     if (!existing) {
       existing = { month, total: 0, transactions: [] };

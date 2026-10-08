@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mutationGuard, writeAuditLog } from "@/lib/api-auth";
+import { validate, updateInventoryItemSchema } from "@/lib/api-validations";
 
 export async function PATCH(
   request: Request,
@@ -11,7 +12,11 @@ export async function PATCH(
     if (user instanceof NextResponse) return user;
 
     const { id } = await params;
-    const body = await request.json();
+    const body: unknown = await request.json();
+    const validation = validate(updateInventoryItemSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
+    }
     const {
       name,
       categoryId,
@@ -24,7 +29,7 @@ export async function PATCH(
       defaultSupplierId,
       shelfLifeDays,
       requiresExpiryTracking,
-    } = body;
+    } = validation.data;
 
     const item = await prisma.inventoryItem.update({
       where: { id },

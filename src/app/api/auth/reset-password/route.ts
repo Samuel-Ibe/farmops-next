@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { checkRateLimit, rateLimitResponse, getClientIp } from "@/lib/api-auth";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { validate, resetPasswordSchema } from "@/lib/api-validations";
 
 // Matches how the token is stored by /api/auth/forgot-password
 function hashToken(token: string): string {
@@ -17,26 +18,13 @@ export async function POST(request: Request) {
       return rateLimitResponse(resetAt);
     }
 
-    const body = await request.json();
-    const { token, password } = body;
-
-    if (!token || !password) {
-      return NextResponse.json({ error: "Token and password are required" }, { status: 400 });
+    // Strength rules live in resetPasswordSchema — same messages, one pass.
+    const body: unknown = await request.json();
+    const validation = validate(resetPasswordSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
     }
-
-    // Validate password strength
-    if (password.length < 8) {
-      return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
-    }
-    if (!/[A-Z]/.test(password)) {
-      return NextResponse.json({ error: "Password must contain an uppercase letter" }, { status: 400 });
-    }
-    if (!/[a-z]/.test(password)) {
-      return NextResponse.json({ error: "Password must contain a lowercase letter" }, { status: 400 });
-    }
-    if (!/[0-9]/.test(password)) {
-      return NextResponse.json({ error: "Password must contain a number" }, { status: 400 });
-    }
+    const { token, password } = validation.data;
 
     // Find the notification storing the digest of this token
     const notification = await prisma.notification.findFirst({

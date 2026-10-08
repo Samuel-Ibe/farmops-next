@@ -38,7 +38,8 @@ export default function StockCountPage() {
   const loadCounts = useCallback(async () => {
     const res = await fetch("/api/stock-count");
     if (!res.ok) throw new Error("Failed to fetch stock counts");
-    const json = await res.json();
+    const json: { data?: StockCountWithRelations[] } | StockCountWithRelations[] | null =
+      await res.json();
     const data: StockCountWithRelations[] = Array.isArray(json)
       ? json
       : json?.data || [];
@@ -60,7 +61,7 @@ export default function StockCountPage() {
   useEffect(() => {
     loadCounts()
       .then(setCounts)
-      .catch((err) => console.error("Failed to fetch stock counts:", err))
+      .catch((err: unknown) => console.error("Failed to fetch stock counts:", err))
       .finally(() => setLoading(false));
   }, [loadCounts]);
 

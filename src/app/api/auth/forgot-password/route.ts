@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { checkRateLimit, rateLimitResponse, getClientIp } from "@/lib/api-auth";
 import crypto from "crypto";
 import { sendEmail } from "@/lib/email";
+import { validate, forgotPasswordSchema } from "@/lib/api-validations";
 
 // Only the SHA-256 digest of a reset token is ever persisted or logged.
 // The raw token exists only in the email we send to the token's owner.
@@ -18,16 +19,16 @@ export async function POST(request: Request) {
       return rateLimitResponse(resetAt);
     }
 
-    const body = await request.json();
-    const { email } = body;
-
-    if (!email || typeof email !== "string") {
-      return NextResponse.json({ error: "Email is required" }, { status: 400 });
+    const body: unknown = await request.json();
+    const validation = validate(forgotPasswordSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
     }
+    const { email } = validation.data;
 
     // Always return success to prevent email enumeration
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() },
+      where: { email },
     });
 
     if (user) {

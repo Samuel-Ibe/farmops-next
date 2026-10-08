@@ -51,7 +51,7 @@ export default function SeasonsPage() {
   useEffect(() => {
     fetchSeasons()
       .then(setSeasons)
-      .catch((err) => console.error("Failed to fetch seasons:", err))
+      .catch((err: unknown) => console.error("Failed to fetch seasons:", err))
       .finally(() => setLoading(false));
   }, [fetchSeasons]);
 
@@ -63,7 +63,7 @@ export default function SeasonsPage() {
       setDeleteTarget(null);
       reloadSeasons();
     } else {
-      const err = await res.json();
+      const err: { error?: string } = await res.json();
       toast(err.error || "Failed to delete", "error");
     }
   };

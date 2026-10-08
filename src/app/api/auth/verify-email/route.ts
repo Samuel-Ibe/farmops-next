@@ -7,9 +7,9 @@ import {
   VERIFICATION_WINDOW_MS,
   digestFromMessage,
   isVerificationExpired,
-  isWellFormedCode,
   matchesVerificationCode,
 } from "@/lib/email-verification";
+import { validate, verifyEmailSchema } from "@/lib/api-validations";
 
 /**
  * Second factor for a fresh sign-up: proves the person who registered also
@@ -27,20 +27,14 @@ export async function POST(request: Request) {
       return rateLimitResponse(ipBudget.resetAt);
     }
 
-    const body = await request.json();
-    const email = typeof body.email === "string" ? body.email.toLowerCase().trim() : "";
-    const code = typeof body.code === "string" ? body.code.trim() : "";
-
-    if (!email) {
-      return NextResponse.json({ error: "Email is required" }, { status: 400 });
+    // Rejected before any lookup: a malformed address or a non-6-digit code
+    // can never succeed, and this must not become an enumeration oracle.
+    const body: unknown = await request.json();
+    const validation = validate(verifyEmailSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
     }
-    // Rejected before any lookup: a non-6-digit string can never be right.
-    if (!isWellFormedCode(code)) {
-      return NextResponse.json(
-        { error: "Enter the 6-digit code from your email" },
-        { status: 400 }
-      );
-    }
+    const { email, code } = validation.data;
 
     // Per-account guess budget. Counted on every well-formed attempt, which
     // is what keeps a 1e6 code space from being walked down.

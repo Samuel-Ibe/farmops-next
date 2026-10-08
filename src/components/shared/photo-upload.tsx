@@ -62,11 +62,11 @@ export function PhotoUpload({
         });
 
         if (!res.ok) {
-          const data = await res.json();
+          const data: { error?: string } = await res.json();
           throw new Error(data.error || "Upload failed");
         }
 
-        const data = await res.json();
+        const data: { url: string } = await res.json();
         // Clean up local preview and use server URL
         URL.revokeObjectURL(localPreview);
         setPreview(data.url);

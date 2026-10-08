@@ -35,6 +35,25 @@ jobs:
       - name: Lint
         run: pnpm eslint . --max-warnings 10
 
+  # ─── Strict type-coverage floor (package.json typeCoverage) ──
+  typecov:
+    name: Type Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Type coverage >= 99% (strict, excludes generated .next)
+        run: pnpm exec type-coverage
+
   # ─── Unit + PostgreSQL integration tests ────────────
   test:
     name: Tests (unit + PostgreSQL)

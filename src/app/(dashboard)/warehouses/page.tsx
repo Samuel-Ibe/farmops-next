@@ -49,7 +49,7 @@ export default function WarehousesPage() {
   useEffect(() => {
     loadWarehouses()
       .then(setWarehouses)
-      .catch((err) => console.error("Failed to fetch warehouses:", err))
+      .catch((err: unknown) => console.error("Failed to fetch warehouses:", err))
       .finally(() => setLoading(false));
   }, [loadWarehouses]);
 
@@ -61,7 +61,7 @@ export default function WarehousesPage() {
       setDeleteTarget(null);
       fetchWarehouses();
     } else {
-      const err = await res.json();
+      const err: { error?: string } = await res.json();
       toast(err.error || "Failed to delete warehouse", "error");
     }
   };

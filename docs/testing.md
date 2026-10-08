@@ -30,7 +30,7 @@ ruleset (owner push bypass keeps direct pushes working).
 |---|---|---|
 | Unit tests | **176 passing** across 15 files (169 pure unit + 7 real-PostgreSQL; the DB 7 self-skip without `DB_TEST_DATABASE_URL`) | `pnpm test` |
 | E2E tests | **35 passing** (13 tenant-isolation adversarial, 17 API contract, 5 auth/UI) | `pnpm run test:e2e` |
-| Type coverage | **98.26%** (43,230 / 43,992) | `npx type-coverage` |
+| Type coverage | **99.51%** (43,372 / 43,583) — hard CI gate (`typecov` job) | `pnpm type-coverage` |
 | TypeScript | `strict: true`, 0 errors | `npx tsc --noEmit` |
 | ESLint | **0 errors**, 2 warnings (budget 10) — hard CI gate since Phase 4 | `npx eslint . --max-warnings 10` |
 | Branch coverage across `src/lib` | **92.5%** | `pnpm run test:coverage` |

@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     const user = await mutationGuard(request, { minRole: "WAREHOUSE_MANAGER" });
     if (user instanceof NextResponse) return user;
 
-    const body = await request.json();
+    const body: unknown = await request.json();
     const validation = validate(createTransactionSchema, body);
     if (!validation.success) {
       return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });

@@ -90,7 +90,7 @@ function WebhooksTab() {
         setWebhooks(result.webhooks);
         setEvents(result.events);
       })
-      .catch((err) => console.error("Failed to fetch webhooks:", err))
+      .catch((err: unknown) => console.error("Failed to fetch webhooks:", err))
       .finally(() => setLoading(false));
   }, [loadWebhooks]);
 
@@ -290,7 +290,7 @@ function ApiKeysTab() {
   useEffect(() => {
     loadKeys()
       .then(setKeys)
-      .catch((err) => console.error("Failed to fetch API keys:", err))
+      .catch((err: unknown) => console.error("Failed to fetch API keys:", err))
       .finally(() => setLoading(false));
   }, [loadKeys]);
 

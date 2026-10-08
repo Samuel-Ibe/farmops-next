@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { mutationGuard, writeAuditLog, getClientIp, resolveFarmScope, withIdempotency } from "@/lib/api-auth";
 import { applyStockDelta } from "@/lib/stock";
 import { logRouteError } from "@/lib/logger";
+import { validate, transferBatchSchema } from "@/lib/api-validations";
 
 /**
  * POST /api/batches/transfer
@@ -23,15 +25,12 @@ export async function POST(request: Request) {
     if (user instanceof NextResponse) return user;
     const farmScope = resolveFarmScope(user);
 
-    const body = await request.json();
-    const { batchId, toWarehouseId, quantity, notes } = body;
-
-    if (!batchId || !toWarehouseId || !quantity || quantity <= 0) {
-      return NextResponse.json(
-        { error: "batchId, toWarehouseId, and positive quantity are required" },
-        { status: 400 }
-      );
+    const body: unknown = await request.json();
+    const validation = validate(transferBatchSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
     }
+    const { batchId, toWarehouseId, quantity, notes } = validation.data;
 
     return await withIdempotency(request, `POST /api/batches/transfer:${user.id}`, async () => {
     const sourceBatch = await prisma.inventoryBatch.findUnique({
@@ -101,7 +100,9 @@ export async function POST(request: Request) {
       });
       if (!updatedSource) return { error: { reason: "BATCH_NOT_FOUND", available: 0 } } as const;
 
-      let destinationBatch;
+      let destinationBatch: Prisma.InventoryBatchGetPayload<{
+        include: { item: true; warehouse: true };
+      }> | null = null;
 
       if (existingDestBatch) {
         // Add to existing batch at destination — atomic increments; two

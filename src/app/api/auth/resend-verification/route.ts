@@ -10,6 +10,7 @@ import {
   hashVerificationCode,
   verificationMessage,
 } from "@/lib/email-verification";
+import { validate, resendVerificationSchema } from "@/lib/api-validations";
 
 /** Identical wording whether or not anything was sent — no enumeration oracle. */
 const GENERIC_MESSAGE =
@@ -33,11 +34,12 @@ export async function POST(request: Request) {
       return rateLimitResponse(ipBudget.resetAt);
     }
 
-    const body = await request.json();
-    const email = typeof body.email === "string" ? body.email.toLowerCase().trim() : "";
-    if (!email) {
-      return NextResponse.json({ error: "Email is required" }, { status: 400 });
+    const body: unknown = await request.json();
+    const validation = validate(resendVerificationSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
     }
+    const { email } = validation.data;
 
     // Per-mailbox budget: an unverified account must not become a mail cannon.
     const mailboxBudget = checkRateLimit(

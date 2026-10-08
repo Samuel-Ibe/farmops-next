@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mutationGuard } from "@/lib/api-auth";
+import { validate, updateFarmSchema } from "@/lib/api-validations";
 
 export async function PATCH(
   request: Request,
@@ -16,8 +17,12 @@ export async function PATCH(
       return NextResponse.json({ error: "Not authorized to edit this farm" }, { status: 403 });
     }
 
-    const body = await request.json();
-    const { name, location, description, acreage } = body;
+    const body: unknown = await request.json();
+    const validation = validate(updateFarmSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
+    }
+    const { name, location, description, acreage } = validation.data;
 
     const farm = await prisma.farm.update({
       where: { id },

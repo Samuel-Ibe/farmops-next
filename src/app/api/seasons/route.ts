@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mutationGuard, requireAuth, resolveFarmScope } from "@/lib/api-auth";
+import { validate, createSeasonSchema } from "@/lib/api-validations";
 
 export async function GET(request: Request) {
   try {
@@ -36,8 +37,12 @@ export async function POST(request: Request) {
   try {
     const guard = await mutationGuard(request, { minRole: "FARM_MANAGER" });
     if (guard instanceof NextResponse) return guard;
-    const body = await request.json();
-    const { name, cropType, farmId, startDate, endDate, status } = body;
+    const body: unknown = await request.json();
+    const validation = validate(createSeasonSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
+    }
+    const { name, cropType, farmId, startDate, endDate, status } = validation.data;
 
     // Non-admins can only create seasons on their own farm
     const scopedFarmId = guard.role === "ADMIN" ? farmId : guard.farmId;

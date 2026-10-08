@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { mutationGuard, writeAuditLog, getClientIp, requireAuth, resolveFarmScope } from "@/lib/api-auth";
 import { applyStockDelta } from "@/lib/stock";
 import { logRouteError } from "@/lib/logger";
+import { validate, updateStockCountSchema } from "@/lib/api-validations";
 
 // Stock counts are scoped to the warehouse's farm
 function farmScopeWhere(user: { role: string; farmId?: string | null }) {
@@ -55,7 +56,12 @@ export async function PATCH(
     if (user instanceof NextResponse) return user;
 
     const { id } = await params;
-    const body = await request.json();
+    const body: unknown = await request.json();
+    const validation = validate(updateStockCountSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
+    }
+    const data = validation.data;
 
     const existing = await prisma.stockCount.findFirst({
       where: { id, ...farmScopeWhere(user) },
@@ -69,27 +75,27 @@ export async function PATCH(
     const allowedUpdates: Prisma.StockCountUpdateInput = {};
 
     // Status update: IN_PROGRESS -> COMPLETED -> RECONCILED
-    if (body.status) {
+    if (data.status) {
       const validTransitions: Record<string, string[]> = {
         IN_PROGRESS: ["COMPLETED"],
         COMPLETED: ["RECONCILED"],
       };
 
       const allowed = validTransitions[existing.status] || [];
-      if (!allowed.includes(body.status)) {
+      if (!allowed.includes(data.status)) {
         return NextResponse.json(
-          { error: `Cannot transition from ${existing.status} to ${body.status}` },
+          { error: `Cannot transition from ${existing.status} to ${data.status}` },
           { status: 400 }
         );
       }
-      allowedUpdates.status = body.status;
+      allowedUpdates.status = data.status;
     }
 
-    if (body.notes !== undefined) {
-      allowedUpdates.notes = body.notes;
+    if (data.notes !== undefined) {
+      allowedUpdates.notes = data.notes;
     }
 
-    if (Object.keys(allowedUpdates).length === 0 && !body.items) {
+    if (Object.keys(allowedUpdates).length === 0 && !data.items) {
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
     }
 
@@ -99,8 +105,8 @@ export async function PATCH(
     // to zero and recording a transaction for stock that was never moved.
     const outcome = await prisma.$transaction(async (tx) => {
     // Update item quantities if provided
-    if (body.items && Array.isArray(body.items)) {
-      for (const itemUpdate of body.items) {
+    if (data.items) {
+      for (const itemUpdate of data.items) {
         if (itemUpdate.id && itemUpdate.countedQuantity !== undefined) {
           const countItem = await tx.stockCountItem.findUnique({
             where: { id: itemUpdate.id },
@@ -117,7 +123,7 @@ export async function PATCH(
             });
 
             // If reconciling, apply variance to the actual batch
-            if (body.status === "RECONCILED" && variance !== 0) {
+            if (data.status === "RECONCILED" && variance !== 0) {
               const batch = await tx.inventoryBatch.findUnique({
                 where: { id: countItem.batchId },
               });

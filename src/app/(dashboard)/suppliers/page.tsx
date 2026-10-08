@@ -57,7 +57,7 @@ export default function SuppliersPage() {
   useEffect(() => {
     loadSuppliers()
       .then(setSuppliers)
-      .catch((err) => console.error("Failed to fetch suppliers:", err))
+      .catch((err: unknown) => console.error("Failed to fetch suppliers:", err))
       .finally(() => setLoading(false));
   }, [loadSuppliers]);
 
@@ -69,7 +69,7 @@ export default function SuppliersPage() {
       setDeleteTarget(null);
       fetchSuppliers();
     } else {
-      const err = await res.json();
+      const err: { error?: string } = await res.json();
       toast(err.error || "Failed to delete supplier", "error");
     }
   };

@@ -47,9 +47,9 @@ export function WasteForm({ open, onOpenChange, onSuccess }: WasteFormProps) {
       Promise.all([
         fetch("/api/inventory").then((r) => r.json()),
         fetch("/api/farms").then((r) => r.json()),
-      ]).then(([items, f]) => {
+      ]).then(([items, f]: [InventoryItemWithTotals[], Farm[]]) => {
         // Flatten batches from all items
-        const allBatches = (items as InventoryItemWithTotals[]).flatMap((item) =>
+        const allBatches = items.flatMap((item) =>
           (item.batches || [])
             .filter((b) => b.status === "ACTIVE")
             .map((b) => ({
@@ -111,7 +111,7 @@ export function WasteForm({ open, onOpenChange, onSuccess }: WasteFormProps) {
         toast("Waste recorded successfully", "success");
         onSuccess();
       } else {
-        const err = await res.json();
+        const err: { error?: string } = await res.json();
         toast(err.error || "Failed to record waste", "error");
       }
     } catch {

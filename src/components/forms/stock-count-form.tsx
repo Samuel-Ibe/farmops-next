@@ -142,7 +142,7 @@ export function StockCountForm({ open, onOpenChange, onSuccess }: StockCountForm
         toast("Stock count recorded successfully", "success");
         onSuccess();
       } else {
-        const err = await res.json();
+        const err: { error?: string } = await res.json();
         toast(err.error || "Failed to record stock count", "error");
       }
     } catch {

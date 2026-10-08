@@ -46,7 +46,7 @@ export function RequestForm({
         fetch("/api/farms").then((r) => r.json()),
         fetch("/api/users").then((r) => r.json()),
       ])
-        .then(([itemData, whData, farmData, userData]) => {
+        .then(([itemData, whData, farmData, userData]: [InventoryItemWithTotals[], WarehouseWithFarm[], Farm[], RequesterOption[]]) => {
           setItems(itemData);
           setWarehouses(whData);
           setFarms(farmData);
@@ -67,7 +67,7 @@ export function RequestForm({
     });
 
     if (!res.ok) {
-      const err = await res.json();
+      const err: { error?: string } = await res.json();
       throw new Error(err.error || "Failed to create request");
     }
 

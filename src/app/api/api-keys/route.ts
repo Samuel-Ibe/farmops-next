@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createApiKey, listApiKeys } from "@/lib/api-keys";
 import { mutationGuard, requireRole } from "@/lib/api-auth";
+import { validate, createApiKeySchema } from "@/lib/api-validations";
 
 /**
  * GET /api/api-keys
@@ -35,15 +36,12 @@ export async function POST(request: Request) {
     const user = await mutationGuard(request, { minRole: "ADMIN" });
     if (user instanceof NextResponse) return user;
 
-    const body = await request.json();
-    const { name, permissions, farmId } = body;
-
-    if (!name || !permissions || !Array.isArray(permissions)) {
-      return NextResponse.json(
-        { error: "name and permissions[] are required" },
-        { status: 400 }
-      );
+    const body: unknown = await request.json();
+    const validation = validate(createApiKeySchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
     }
+    const { name, permissions, farmId } = validation.data;
 
     // Optionally pin the key to a single farm for tenant isolation
     if (farmId) {

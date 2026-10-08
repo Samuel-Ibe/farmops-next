@@ -23,7 +23,7 @@ export function useFetch<T>(
     if (!url) return null;
     const res = await fetch(url);
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
+      const body: { error?: string } = await res.json().catch(() => ({}));
       throw new Error(body.error || `Request failed: ${res.status}`);
     }
     return (await res.json()) as T;

@@ -34,7 +34,8 @@ export default function WastePage() {
   const loadWaste = useCallback(async () => {
     const res = await fetch("/api/waste");
     if (!res.ok) throw new Error("Failed to fetch waste records");
-    const json = await res.json();
+    const json: { data?: WasteRecordWithRelations[] } | WasteRecordWithRelations[] | null =
+      await res.json();
     const data: WasteRecordWithRelations[] = Array.isArray(json)
       ? json
       : json?.data || [];
@@ -56,7 +57,7 @@ export default function WastePage() {
   useEffect(() => {
     loadWaste()
       .then(setRecords)
-      .catch((err) => console.error("Failed to fetch waste records:", err))
+      .catch((err: unknown) => console.error("Failed to fetch waste records:", err))
       .finally(() => setLoading(false));
   }, [loadWaste]);
 

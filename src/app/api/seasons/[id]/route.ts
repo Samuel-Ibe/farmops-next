@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { mutationGuard } from "@/lib/api-auth";
+import { validate, updateSeasonSchema } from "@/lib/api-validations";
 
 export async function PATCH(
   request: Request,
@@ -21,8 +22,12 @@ export async function PATCH(
       return NextResponse.json({ error: "Season belongs to another farm" }, { status: 403 });
     }
 
-    const body = await request.json();
-    const { status, name, startDate, endDate, cropType } = body;
+    const body: unknown = await request.json();
+    const validation = validate(updateSeasonSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
+    }
+    const { status, name, startDate, endDate, cropType } = validation.data;
 
     const updateData: Prisma.SeasonUpdateInput = {};
     if (status) updateData.status = status;

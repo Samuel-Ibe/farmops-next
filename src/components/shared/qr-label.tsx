@@ -40,7 +40,7 @@ export function QRLabel({
       });
 
       if (res.ok) {
-        const data = await res.json();
+        const data: { qrDataUrl: string } = await res.json();
         setQrDataUrl(data.qrDataUrl);
       } else {
         toast("Failed to generate QR code", "error");

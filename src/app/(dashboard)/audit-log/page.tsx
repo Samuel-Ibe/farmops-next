@@ -29,7 +29,7 @@ export default function AuditLogPage() {
   useEffect(() => {
     loadLogs()
       .then(setLogs)
-      .catch((err) => console.error("Failed to fetch audit logs:", err))
+      .catch((err: unknown) => console.error("Failed to fetch audit logs:", err))
       .finally(() => setLoading(false));
   }, [loadLogs]);
 

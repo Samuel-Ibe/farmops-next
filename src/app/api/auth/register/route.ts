@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       return rateLimitResponse(resetAt);
     }
 
-    const body = await request.json();
+    const body: unknown = await request.json();
 
     const validation = validate(createUserSchema, body);
     if (!validation.success) {

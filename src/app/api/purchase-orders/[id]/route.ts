@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { mutationGuard, writeAuditLog } from "@/lib/api-auth";
+import { validate, updatePurchaseOrderSchema } from "@/lib/api-validations";
 
 export async function PATCH(
   request: Request,
@@ -12,8 +13,7 @@ export async function PATCH(
     if (user instanceof NextResponse) return user;
 
     const { id } = await params;
-    const body = await request.json();
-    const { status, notes, actualDeliveryDate } = body;
+    const body: unknown = await request.json();
 
     const po = await prisma.purchaseOrder.findUnique({ where: { id } });
     if (!po) {
@@ -24,6 +24,12 @@ export async function PATCH(
     if (user.role !== "ADMIN" && po.farmId !== user.farmId) {
       return NextResponse.json({ error: "Purchase order belongs to another farm" }, { status: 403 });
     }
+
+    const validation = validate(updatePurchaseOrderSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
+    }
+    const { status, notes, actualDeliveryDate } = validation.data;
 
     const updateData: Prisma.PurchaseOrderUpdateInput = {};
     if (status) updateData.status = status;

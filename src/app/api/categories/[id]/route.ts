@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mutationGuard } from "@/lib/api-auth";
+import { validate, updateCategorySchema } from "@/lib/api-validations";
 
 export async function PUT(
   request: Request,
@@ -10,8 +11,12 @@ export async function PUT(
     const guard = await mutationGuard(request, { minRole: "FARM_MANAGER" });
     if (guard instanceof NextResponse) return guard;
     const { id } = await params;
-    const body = await request.json();
-    const { name, color, description, icon } = body;
+    const body: unknown = await request.json();
+    const validation = validate(updateCategorySchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
+    }
+    const { name, color, description, icon } = validation.data;
 
     const category = await prisma.category.update({
       where: { id },

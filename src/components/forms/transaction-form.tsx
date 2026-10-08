@@ -53,9 +53,9 @@ export function TransactionForm({
         fetch("/api/farms").then((r) => r.json()),
         fetch("/api/users").then((r) => r.json()),
       ])
-        .then(([inventoryItems, whData, farmData, userData]) => {
+        .then(([inventoryItems, whData, farmData, userData]: [InventoryItemWithTotals[], WarehouseWithFarm[], Farm[], OperatorOption[]]) => {
           // Flatten all batches from inventory items
-          const allBatches = (inventoryItems as InventoryItemWithTotals[]).flatMap((item) =>
+          const allBatches = inventoryItems.flatMap((item) =>
             item.batches.map((b) => ({
               ...b,
               itemName: item.name,
@@ -96,7 +96,7 @@ export function TransactionForm({
     });
 
     if (!res.ok) {
-      const err = await res.json();
+      const err: { error?: string } = await res.json();
       throw new Error(err.error || "Failed to create transaction");
     }
 

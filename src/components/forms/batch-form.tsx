@@ -45,7 +45,7 @@ export function BatchForm({
         fetch("/api/warehouses").then((r) => r.json()),
         fetch("/api/suppliers").then((r) => r.json()),
       ])
-        .then(([itemData, whData, supData]) => {
+        .then(([itemData, whData, supData]: [InventoryItem[], WarehouseWithFarm[], Supplier[]]) => {
           setItems(itemData);
           setWarehouses(whData);
           setSuppliers(supData);
@@ -80,7 +80,7 @@ export function BatchForm({
     });
 
     if (!res.ok) {
-      const err = await res.json();
+      const err: { error?: string } = await res.json();
       throw new Error(err.error || "Failed to create batch");
     }
 

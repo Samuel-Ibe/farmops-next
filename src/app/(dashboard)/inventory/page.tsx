@@ -55,7 +55,8 @@ export default function InventoryPage() {
     if (query) params.set("search", query);
     const res = await fetch(`/api/inventory?${params}`);
     if (!res.ok) throw new Error("Failed to fetch inventory");
-    const json = await res.json();
+    const json: { data?: InventoryItemWithTotals[] } | InventoryItemWithTotals[] | null =
+      await res.json();
     const data: InventoryItemWithTotals[] = Array.isArray(json)
       ? json
       : json?.data || [];
@@ -77,7 +78,7 @@ export default function InventoryPage() {
   // Fetch warehouses for transfer form
   useEffect(() => {
     fetch("/api/warehouses")
-      .then((r) => r.json())
+      .then<{ data?: Warehouse[] } | Warehouse[]>((r) => r.json())
       .then((data) => setWarehouses(Array.isArray(data) ? data : data.data || []))
       .catch(() => {});
   }, []);
@@ -85,7 +86,7 @@ export default function InventoryPage() {
   useEffect(() => {
     loadItems("")
       .then(setItems)
-      .catch((err) => console.error("Failed to fetch inventory:", err))
+      .catch((err: unknown) => console.error("Failed to fetch inventory:", err))
       .finally(() => setLoading(false));
   }, [loadItems]);
 
@@ -93,12 +94,12 @@ export default function InventoryPage() {
     if (!deleteTarget) return;
     const res = await fetch(`/api/inventory/${deleteTarget.id}`, { method: "DELETE" });
     if (res.ok) {
-      const msg = await res.json();
+      const msg: { message?: string } = await res.json();
       toast(msg.message === "Item deactivated" ? "Item deactivated (has batches)" : "Item deleted", "success");
       setDeleteTarget(null);
       fetchItems();
     } else {
-      const err = await res.json();
+      const err: { error?: string } = await res.json();
       toast(err.error || "Failed to delete item", "error");
     }
   };

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mutationGuard, requireAuth, resolveFarmScope } from "@/lib/api-auth";
+import { validate, createFarmSchema, updateFarmWithIdSchema } from "@/lib/api-validations";
 
 export async function GET(request: Request) {
   try {
@@ -43,8 +44,12 @@ export async function POST(request: Request) {
     // Creating a farm creates a new tenant — admin only
     const guard = await mutationGuard(request, { minRole: "ADMIN" });
     if (guard instanceof NextResponse) return guard;
-    const body = await request.json();
-    const { name, location, description, acreage } = body;
+    const body: unknown = await request.json();
+    const validation = validate(createFarmSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
+    }
+    const { name, location, description, acreage } = validation.data;
 
     const farm = await prisma.farm.create({
       data: { name, location, description, acreage },
@@ -64,8 +69,12 @@ export async function PUT(request: Request) {
   try {
     const guard = await mutationGuard(request, { minRole: "FARM_MANAGER" });
     if (guard instanceof NextResponse) return guard;
-    const body = await request.json();
-    const { id, name, location, description, acreage } = body;
+    const body: unknown = await request.json();
+    const validation = validate(updateFarmWithIdSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error, details: validation.details }, { status: 400 });
+    }
+    const { id, name, location, description, acreage } = validation.data;
 
     // Non-admins may only edit their own farm
     if (guard.role !== "ADMIN" && (!id || guard.farmId !== id)) {

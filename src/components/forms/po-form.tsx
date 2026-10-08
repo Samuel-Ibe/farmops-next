@@ -77,7 +77,7 @@ export function PurchaseOrderForm({
         fetch("/api/suppliers").then((r) => r.json()),
         fetch("/api/farms").then((r) => r.json()),
         fetch("/api/inventory").then((r) => r.json()),
-      ]).then(([s, f, i]) => {
+      ]).then(([s, f, i]: [Supplier[], Farm[], InventoryItem[]]) => {
         setSuppliers(s);
         setFarms(f);
         setItems(i);
@@ -161,7 +161,7 @@ export function PurchaseOrderForm({
         toast(initialData ? "Purchase order updated" : "Purchase order created", "success");
         onSuccess();
       } else {
-        const err = await res.json();
+        const err: { error?: string } = await res.json();
         toast(err.error || "Failed to save purchase order", "error");
       }
     } catch {

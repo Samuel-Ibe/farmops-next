@@ -16,7 +16,7 @@ export async function PATCH(
     if (user instanceof NextResponse) return user;
 
     const { id } = await params;
-    const body = await request.json();
+    const body: unknown = await request.json();
 
     // Validate input
     const validation = validate(updateRequestSchema, body);
