@@ -46,6 +46,20 @@ export async function PATCH(
       if (status === "RECEIVED" && po.status !== "RECEIVED") {
         updateData.actualDeliveryDate = updateData.actualDeliveryDate || new Date();
 
+        // Atomic claim: the stale `po` read above cannot serialize two
+        // concurrent RECEIVED patches, so re-check status under a row lock
+        // BEFORE crediting. The loser's updateMany matches 0 rows (Postgres
+        // re-evaluates the predicate after the winner commits) and must not
+        // credit a single batch. (Phase 2 review: concurrency.spec.ts S11.)
+        const claimed = await tx.purchaseOrder.updateMany({
+          where: { id, status: { not: "RECEIVED" } },
+          data: {
+            status: "RECEIVED",
+            actualDeliveryDate: updateData.actualDeliveryDate,
+          },
+        });
+        if (claimed.count === 0) return null;
+
         const poItems = await tx.purchaseOrderItem.findMany({
           where: { purchaseOrderId: id },
         });
@@ -113,6 +127,15 @@ export async function PATCH(
         include: { items: { include: { item: true } }, supplier: true, farm: true },
       });
     });
+
+    // A null result means another request won the receipt race — nothing was
+    // credited (the transaction rolled the no-op claim back harmlessly).
+    if (!updated) {
+      return NextResponse.json(
+        { error: "Purchase order has already been received" },
+        { status: 409 }
+      );
+    }
 
     // Audit log
     await writeAuditLog({

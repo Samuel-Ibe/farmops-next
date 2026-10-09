@@ -153,10 +153,14 @@ intelligence, reports). Track with `type-coverage`: **99.51%** (up from
 - **Shared catalog decision (Category/Supplier tenant ownership):** still open —
   see [adr/ADR-002](adr/ADR-002-multi-tenant-design.md); deliberately not
   changed without a decision.
-- **DB constraints for invariants:** not added (would need `prisma migrate` —
-  this repo currently uses `db push` and has no migration history). Candidate:
-  `CHECK (quantityRemaining >= 0)` as a defence-in-depth backstop to the
-  application-level conditional updates.
+- **DB constraints for invariants:** done — the repo now has versioned
+  migration history (`0_init` baseline + invariant migrations, deployed via
+  `prisma migrate deploy` in CI, never `db push`). `CHECK (quantityRemaining
+  >= 0)` and `CHECK (quantity >= 0)` backstop the application-level
+  conditional updates, and quantity/amount columns across transactions,
+  requests, purchase orders, waste and stock counts carry non-negative
+  checks matching the zod validation layer. Signed `variance` columns are
+  deliberately unconstrained.
 
 ---
 

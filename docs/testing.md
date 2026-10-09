@@ -28,8 +28,8 @@ ruleset (owner push bypass keeps direct pushes working).
 
 | Metric | Value | How it's measured |
 |---|---|---|
-| Unit tests | **176 passing** across 15 files (169 pure unit + 7 real-PostgreSQL; the DB 7 self-skip without `DB_TEST_DATABASE_URL`) | `pnpm test` |
-| E2E tests | **53 passing** (21 tenant-isolation adversarial, 10 concurrency/transaction-integrity against real PostgreSQL, 17 API contract, 5 auth/UI) | `pnpm run test:e2e` |
+| Unit tests | **171 passing** locally / **178 in CI** across 15 files (171 always-on unit/integration incl. 95 security tests + 7 real-PostgreSQL; the DB 7 self-skip without `DB_TEST_DATABASE_URL` and run in CI) | `pnpm test` |
+| E2E tests | **54 passing** (21 tenant-isolation adversarial, 11 concurrency/transaction-integrity against real PostgreSQL, 17 API contract, 5 auth/UI) | `pnpm run test:e2e` |
 | Type coverage | **99.51%** (43,372 / 43,583) — hard CI gate (`typecov` job) | `pnpm type-coverage` |
 | TypeScript | `strict: true`, 0 errors | `npx tsc --noEmit` |
 | ESLint | **0 errors**, 2 warnings (budget 10) — hard CI gate since Phase 4 | `npx eslint . --max-warnings 10` |

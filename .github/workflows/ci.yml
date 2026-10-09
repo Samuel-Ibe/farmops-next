@@ -89,6 +89,14 @@ jobs:
           DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
         run: pnpm exec prisma migrate deploy
 
+      # Phase 3 drift gate: after a fresh `migrate deploy`, the database must
+      # match schema.prisma exactly. Fails CI when someone edits the schema
+      # without a versioned migration (the db push failure mode).
+      - name: Verify migrations match schema (no drift)
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+        run: pnpm exec prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+
       - name: Run Tests (includes real-PostgreSQL concurrency suite)
         env:
           DATABASE_URL: ${{ env.TEST_DATABASE_URL }}

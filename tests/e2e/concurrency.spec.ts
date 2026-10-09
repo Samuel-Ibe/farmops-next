@@ -523,4 +523,78 @@ test.describe.serial("Phase 2 — concurrency & transaction integrity (real Post
       ctxAdmin = await apiFor(baseURL, EMAIL.admin);
     }
   });
+
+  test("S11: two concurrent RECEIVED patches — the receipt claim is atomic, stock credited exactly once", async () => {
+    // Review finding: the receipt branch's stale `po.status` read (fetched
+    // outside the transaction) cannot serialize two simultaneous RECEIVED
+    // patches — without the in-transaction row-locked claim, BOTH would run
+    // the credit loop and stock would double. Race them for real and verify
+    // the outcome in the database, not just the HTTP statuses.
+    try {
+      const farm = await ctxAdmin.post("/api/farms", {
+        data: { name: `E2E-CC-Farm-S11-${runId}`, location: "phase-2 receipt race" },
+      });
+      expect(farm.status()).toBe(201);
+      const farmE = ((await farm.json()) as { id: string }).id;
+
+      const wh = await ctxAdmin.post("/api/warehouses", {
+        data: { name: `E2E-CC-WH-E-${runId}`, farmId: farmE, location: "phase-2 receipt race" },
+      });
+      expect(wh.status()).toBe(201);
+      const whE = ((await wh.json()) as { id: string }).id;
+
+      const po = await ctxAdmin.post("/api/purchase-orders", {
+        data: {
+          supplierId: F.supplierId,
+          farmId: farmE,
+          items: [
+            { itemId: F.itemA, quantity: 4, unitPrice: 2 },
+            { itemId: F.sharedItem, quantity: 6, unitPrice: 2 },
+          ],
+          notes: "E2E-CC S11 receipt race",
+        },
+      });
+      expect(po.status()).toBe(201);
+      const poBody = (await po.json()) as { id: string };
+
+      const [r1, r2] = await Promise.all([
+        ctxAdmin.patch(`/api/purchase-orders/${poBody.id}`, {
+          timeout: REQ_TIMEOUT,
+          data: { status: "RECEIVED" },
+        }),
+        ctxAdmin.patch(`/api/purchase-orders/${poBody.id}`, {
+          timeout: REQ_TIMEOUT,
+          data: { status: "RECEIVED" },
+        }),
+      ]);
+
+      const statuses = [r1.status(), r2.status()].sort();
+      expect(statuses, "exactly one receipt must win, the other must fail safely").toEqual([200, 409]);
+      const loser = r1.status() === 200 ? r2 : r1;
+      expect((await loser.json()).error).toContain("already been received");
+
+      // Database evidence of exactly-once crediting:
+      const poAfter = await prisma.purchaseOrder.findUnique({
+        where: { id: poBody.id },
+        select: {
+          status: true,
+          items: { select: { itemId: true, quantityReceived: true } },
+        },
+      });
+      expect(poAfter?.status).toBe("RECEIVED");
+      expect(poAfter?.items.find((i) => i.itemId === F.itemA)?.quantityReceived).toBe(4);
+      expect(poAfter?.items.find((i) => i.itemId === F.sharedItem)?.quantityReceived).toBe(6);
+
+      const credited = await prisma.inventoryBatch.findMany({
+        where: { warehouseId: whE },
+        select: { itemId: true, quantity: true, quantityRemaining: true },
+      });
+      expect(credited, "one batch per item — the losing receipt credited nothing").toHaveLength(2);
+      expect(credited.find((b) => b.itemId === F.itemA)?.quantity).toBe(4);
+      expect(credited.find((b) => b.itemId === F.sharedItem)?.quantity).toBe(6);
+    } finally {
+      await ctxAdmin.dispose().catch(() => undefined);
+      ctxAdmin = await apiFor(baseURL, EMAIL.admin);
+    }
+  });
 });

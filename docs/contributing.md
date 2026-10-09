@@ -10,7 +10,7 @@ genuinely slows you down, propose changing it in a PR that edits this file.
 ```bash
 npm install --legacy-peer-deps   # peer-dep note below
 cp .env.example .env             # fill in DATABASE_URL + NEXTAUTH_SECRET
-npx prisma db push               # dev schema sync (see ADR-003 for migrate)
+npx prisma migrate deploy        # versioned migrations (reproducible; see ADR-003)
 npm run db:seed
 npm run dev
 ```

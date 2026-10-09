@@ -19,8 +19,8 @@ Measured on `master`, not estimated. The badge above reflects all **six** CI che
 | Type coverage | **99.51%** (43,372 / 43,583) — hard CI gate (`Type Coverage` job) | `type-coverage` |
 | TypeScript | `strict: true`, **0 errors** | `tsc --noEmit` |
 | ESLint | **0 errors**, 2 warnings (budget `--max-warnings 10`) — hard CI gate | `eslint .` |
-| Unit tests | **176 passing** (15 suites — incl. 93 adversarial security tests and 7 real-PostgreSQL concurrency/rollback/invariant tests) | Vitest |
-| E2E tests | **53 passing** — 21 route-level tenant-isolation attack scenarios, 10 real-PostgreSQL concurrency/integrity scenarios, 17 API contract checks, 5 auth/UI | Playwright |
+| Unit tests | **171 passing** locally, **178 in CI** (15 files — incl. 95 adversarial security tests and 7 real-PostgreSQL concurrency/rollback/invariant tests that self-skip without `DB_TEST_DATABASE_URL`) | Vitest |
+| E2E tests | **54 passing** — 21 route-level tenant-isolation attack scenarios, 11 real-PostgreSQL concurrency/integrity scenarios, 17 API contract checks, 5 auth/UI | Playwright |
 | Branch coverage, `src/lib` | **92.5%** | `vitest --coverage` |
 | Critical vulnerabilities, production deps | **0** | `pnpm audit --prod` |
 | High vulnerabilities, production deps | **0** (2 moderate accepted — see [security.md](docs/security.md)) | `pnpm audit --prod` |
@@ -33,7 +33,7 @@ Measured on `master`, not estimated. The badge above reflects all **six** CI che
 | Login throttling | 5 failed attempts / IP+account / 15 min, no lockout DoS | `src/lib/rate-limit.ts` |
 | Email verification | **required on sign-up** — 6-digit code, 15-min TTL, 8 guesses/account, HMAC-stored | `src/lib/email-verification.ts` |
 | Security headers | CSP + HSTS + frame/nosniff policy on every response | `src/middleware.ts` |
-| Schema management | versioned Prisma migrations (`prisma/migrations/`, baseline + invariants) deployed in CI — not `db push` | `prisma migrate deploy` |
+| Schema management | versioned Prisma migrations (`prisma/migrations/`, baseline + invariants) deployed in CI with a schema-drift gate (`migrate diff --exit-code`) — not `db push` | `prisma migrate deploy` |
 | Docker | image **builds and boots in CI** with a runtime smoke test (health/DB/auth) | `.github/workflows/ci.yml` |
 | Health endpoint | `GET /api/health` (DB probe, 200/503) | deployment checks |
 | Raw SQL / `dangerouslySetInnerHTML` | **0 / 0** | grep |
@@ -69,8 +69,8 @@ git clone <repo> && cd farmops
 corepack enable              # activates the pnpm pinned in package.json
 pnpm install --frozen-lockfile
 cp .env.example .env               # set DATABASE_URL + NEXTAUTH_SECRET
-npx prisma migrate deploy          # versioned migrations (baseline + invariants)
-npm run db:seed
+pnpm exec prisma migrate deploy    # versioned migrations (baseline + invariants)
+pnpm db:seed
 pnpm dev
 ```
 
