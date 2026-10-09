@@ -36,8 +36,15 @@ export interface FixtureIds {
   warehouseB: string;
   itemA: string;
   itemB: string;
+  supplierId: string;
   batchA: string;
   batchB: string;
+  /** Marker-free shared-catalog item (name carries no E2E-A/E2E-B prefix).
+   *  Farm A may legitimately order it; its only Farm B batch must never be
+   *  credited by Farm A's purchase-order receipt (PO receipt regression). */
+  sharedItem: string;
+  /** Farm B's ACTIVE batch of the shared item — the cross-credit target. */
+  sharedBatchB: string;
   txA: string;
   txB: string;
   requestA: string;
@@ -54,6 +61,10 @@ export interface FixtureIds {
   notificationB: string;
   managerA: string;
   managerB: string;
+  /** Deliberately poisoned row: a Farm A request pointing at Farm B's
+   *  warehouse + item. Proves the approval path can never issue stock from
+   *  a foreign warehouse even if a bad row already exists in the database. */
+  poisonRequestA: string;
 }
 
 /** Load DATABASE_URL from .env when the process doesn't already have it. */
@@ -320,6 +331,9 @@ export async function ensureTenantFixtures(): Promise<FixtureIds> {
     const batchA = await upsertBatch("E2E-A-BATCH-1", itemA.id, warehouseA.id);
     const batchB = await upsertBatch("E2E-B-BATCH-1", itemB.id, warehouseB.id);
 
+    const sharedItem = await upsertItem("E2E Shared Cocoa", category.id, supplier.id);
+    const sharedBatchB = await upsertBatch("E2E-SHARED-1", sharedItem.id, warehouseB.id);
+
     const txA = await upsertTx({
       batchId: batchA.id,
       warehouseId: warehouseA.id,
@@ -373,6 +387,17 @@ export async function ensureTenantFixtures(): Promise<FixtureIds> {
     const notificationA = await upsertNotification(managerA.id, "E2E-A private notice");
     const notificationB = await upsertNotification(managerB.id, "E2E-B private notice");
 
+    // Regression fixture (intentionally invalid data): Farm A request
+    // referencing Farm B's warehouse and item — the shape the requests
+    // create-route used to accept. Approving it must not move Farm B stock.
+    const poisonRequestA = await upsertRequest("E2E-A-POISON-1", {
+      requestedById: managerA.id,
+      farmId: farmA.id,
+      warehouseId: warehouseB.id,
+      itemId: itemB.id,
+      purpose: "E2E regression: cross-farm warehouse reference",
+    });
+
     cachedIds = {
       farmA: farmA.id,
       farmB: farmB.id,
@@ -382,6 +407,8 @@ export async function ensureTenantFixtures(): Promise<FixtureIds> {
       itemB: itemB.id,
       batchA: batchA.id,
       batchB: batchB.id,
+      sharedItem: sharedItem.id,
+      sharedBatchB: sharedBatchB.id,
       txA: txA.id,
       txB: txB.id,
       requestA: requestA.id,
@@ -398,6 +425,8 @@ export async function ensureTenantFixtures(): Promise<FixtureIds> {
       notificationB: notificationB.id,
       managerA: managerA.id,
       managerB: managerB.id,
+      poisonRequestA: poisonRequestA.id,
+      supplierId: supplier.id,
     };
     return cachedIds;
   } finally {

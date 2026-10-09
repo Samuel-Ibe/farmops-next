@@ -12,6 +12,13 @@
  * (inventory *items* are a shared catalog by design; their batches, stock and
  * warehouse relationships are not).
  *
+ * Beyond the original attack set, the suite walks the full ID-addressable
+ * route matrix (GET/PATCH/DELETE), foreign IDs smuggled into create-bodies,
+ * a poisoned cross-farm request row (approval must not drain Farm B stock),
+ * QR/CSV-import boundaries, the webhook registry's auth floor, farm-pinned
+ * external API keys, and positive same-tenant controls that prove the guards
+ * deny attackers without breaking legitimate workflows.
+ *
  * Requires: a running FarmOps server (BASE_URL) and DATABASE_URL for fixture
  * setup. Runs automatically in CI's E2E job.
  */
@@ -21,6 +28,7 @@ import {
   EMAIL,
   ensureTenantFixtures,
   apiFor,
+  anonApiFor,
   type FixtureIds,
 } from "./tenant-fixtures";
 
@@ -69,10 +77,14 @@ test.describe.serial("Tenant isolation — Farm A vs Farm B", () => {
   // ─── Reads ────────────────────────────────────────────────────────
 
   test("Farm A list endpoints never contain Farm B records", async () => {
-    const endpoints: { path: string; mustContain?: string }[] = [
+    // `allowSharedCatalogName`: Farm A's own request list may carry the
+    // poisoned regression row, whose *item* is the shared catalog entry for
+    // Farm B's item (the one documented exception — /api/inventory shows it
+    // too). Batch numbers and warehouse names stay banned everywhere.
+    const endpoints: { path: string; mustContain?: string; allowSharedCatalogName?: boolean }[] = [
       { path: "/api/warehouses", mustContain: "E2E-A Warehouse" },
       { path: "/api/transactions?limit=100", mustContain: "E2E-A-BATCH-1" },
-      { path: "/api/requests", mustContain: "E2E-A-REQ-1" },
+      { path: "/api/requests", mustContain: "E2E-A-REQ-1", allowSharedCatalogName: true },
       { path: "/api/purchase-orders", mustContain: "E2E-A-PO-1" },
       { path: "/api/seasons", mustContain: "E2E-A Season" },
       { path: "/api/waste", mustContain: "E2E-A waste" },
@@ -86,11 +98,16 @@ test.describe.serial("Tenant isolation — Farm A vs Farm B", () => {
       { path: "/api/reports?type=suppliers" },
     ];
 
-    for (const { path, mustContain } of endpoints) {
+    for (const { path, mustContain, allowSharedCatalogName } of endpoints) {
       const res = await ctxA.get(path);
       expect(res.status(), `${path} should be 200`).toBe(200);
       const body = await res.text();
-      expect(body, `${path} must not leak Farm B data`).not.toContain(MARK_B);
+      if (allowSharedCatalogName) {
+        expect(body, `${path} must not leak Farm B batch numbers`).not.toContain("E2E-B-BATCH-1");
+        expect(body, `${path} must not leak Farm B warehouses`).not.toContain("E2E-B Warehouse");
+      } else {
+        expect(body, `${path} must not leak Farm B data`).not.toContain(MARK_B);
+      }
       expect(body, `${path} must not leak Farm B data`).not.toContain("Farm Beta");
       if (mustContain) {
         expect(body, `${path} should contain Farm A's own ${mustContain}`).toContain(mustContain);
@@ -105,7 +122,6 @@ test.describe.serial("Tenant isolation — Farm A vs Farm B", () => {
       `/api/warehouses?farmId=${F.farmB}`,
       `/api/seasons?farmId=${F.farmB}`,
       `/api/waste?farmId=${F.farmB}`,
-      `/api/requests?farmId=${F.farmB}`,
       `/api/reports?type=dashboard&farmId=${F.farmB}`,
       `/api/batches?farmId=${F.farmB}`,
     ];
@@ -115,6 +131,16 @@ test.describe.serial("Tenant isolation — Farm A vs Farm B", () => {
       const body = await res.text();
       expect(body, `${path} must ignore the requested foreign farmId`).not.toContain(MARK_B);
     }
+
+    // /api/requests: Farm A still sees only its own rows (the poisoned
+    // regression row carries the shared catalog item name — the documented
+    // exception), never Farm B's batches or warehouses.
+    const reqRes = await ctxA.get(`/api/requests?farmId=${F.farmB}`);
+    expect(reqRes.status()).toBe(200);
+    const reqBody = await reqRes.text();
+    expect(reqBody, "requests must not leak Farm B batch numbers").not.toContain("E2E-B-BATCH-1");
+    expect(reqBody, "requests must not leak Farm B warehouses").not.toContain("E2E-B Warehouse");
+    expect(reqBody).not.toContain("Farm Beta");
   });
 
   test("cross-tenant reads by ID are denied", async () => {
@@ -388,5 +414,361 @@ test.describe.serial("Tenant isolation — Farm A vs Farm B", () => {
     const rows = (await list.json()) as { referenceNumber?: string }[];
     const effective = rows.filter((t) => t.referenceNumber === referenceNumber);
     expect(effective).toHaveLength(1);
+  });
+
+  // ─── Full ID-route attack matrix (Phase: hardening sweep) ─────────
+
+  test("every remaining ID-addressable route denies Farm A access to Farm B", async () => {
+    // A dedicated context: this test alone spends a large slice of the
+    // per-IP mutation budget.
+    const ctxAx = await apiFor(baseURL, EMAIL.managerA);
+    try {
+      // PATCH probes on routes the original suite did not cover
+      const patchProbes: { path: string; body: object; expect: number[] }[] = [
+        { path: `/api/farms/${F.farmB}`, body: { name: "pwned farm B" }, expect: [403] },
+        { path: `/api/stock-count/${F.stockCountB}`, body: { notes: "pwned count" }, expect: [404] },
+        { path: `/api/notifications/${F.notificationB}`, body: { isRead: true }, expect: [403] },
+        { path: `/api/users/${F.managerB}`, body: { name: "pwned user B" }, expect: [403] },
+      ];
+      for (const probe of patchProbes) {
+        const res = await ctxAx.patch(probe.path, { data: probe.body });
+        expect(probe.expect, `${probe.path} returned ${res.status()}`).toContain(res.status());
+      }
+
+      // DELETE probes: admin-only routes deny at the role gate; the
+      // notification route denies at the owner gate.
+      const deletePaths = [
+        `/api/seasons/${F.seasonB}`,
+        `/api/transactions/${F.txB}`,
+        `/api/purchase-orders/${F.poB}`,
+        `/api/stock-count/${F.stockCountB}`,
+        `/api/farms/${F.farmB}`,
+        `/api/inventory/${F.itemB}`,
+        `/api/suppliers/${F.supplierId}`,
+        `/api/webhooks/nonexistent-probe`,
+      ];
+      for (const path of deletePaths) {
+        const res = await ctxAx.delete(path);
+        expect(res.status(), `${path} returned ${res.status()}`).toBe(403);
+      }
+
+      const delNotif = await ctxAx.delete(`/api/notifications/${F.notificationB}`);
+      expect(delNotif.status(), "notification DELETE must be owner-gated").toBe(403);
+
+      // Farm B's world is fully intact after the whole matrix
+      const ownerSees = await ctxB.get(`/api/notifications/${F.notificationB}`);
+      expect(ownerSees.status(), "Farm B's notification must survive").toBe(200);
+      const seasons = await ctxB.get("/api/seasons");
+      expect(await seasons.text()).toContain("E2E-B Season");
+      const pos = await ctxB.get("/api/purchase-orders");
+      expect(await pos.text()).toContain("E2E-B-PO-1");
+    } finally {
+      await ctxAx.dispose().catch(() => undefined);
+    }
+  });
+
+  test("foreign IDs smuggled into create-bodies are rejected or re-scoped", async () => {
+    const ctxAx = await apiFor(baseURL, EMAIL.managerA);
+    try {
+      // 1) Request pointing at Farm B's warehouse → rejected.
+      //    Regression: previously accepted; approving it would drain Farm B.
+      const reqForeignWh = await ctxAx.post("/api/requests", {
+        data: { farmId: F.farmA, warehouseId: F.warehouseB, itemId: F.itemB, quantity: 5, unitOfMeasure: "bags" },
+      });
+      expect(reqForeignWh.status()).toBe(404);
+
+      // 2) Batch created in Farm B's warehouse → rejected.
+      //    Regression: previously credited Farm B stock with a phantom batch.
+      const batchForeignWh = await ctxAx.post("/api/batches", {
+        data: {
+          itemId: F.itemA,
+          batchNumber: `E2E-A-POISON-BATCH-${Date.now()}`,
+          warehouseId: F.warehouseB,
+          quantityReceived: 5,
+          purchasePrice: 1,
+        },
+      });
+      expect(batchForeignWh.status()).toBe(404);
+
+      // 3) Stock count whose items reference Farm B's batch → rejected.
+      //    Regression: a RECONCILED variance used to apply to the foreign batch.
+      const countForeignBatch = await ctxAx.post("/api/stock-count", {
+        data: {
+          warehouseId: F.warehouseA,
+          notes: "E2E poison count",
+          items: [{ batchId: F.batchB, systemQuantity: 100, countedQuantity: 1 }],
+        },
+      });
+      expect(countForeignBatch.status()).toBe(400);
+
+      // 4) QR generation for Farm B's batch → not found, no metadata leak.
+      //    Regression: previously leaked batch details and wrote onto the row.
+      const qrForeign = await ctxAx.post("/api/qr", { data: { batchId: F.batchB } });
+      expect(qrForeign.status()).toBe(404);
+      const qrBody = await qrForeign.text();
+      expect(qrBody).not.toContain("E2E-B-BATCH-1");
+      expect(qrBody).not.toContain(MARK_B);
+
+      // 5) Waste against Farm B's batch → denied by the batch ownership check
+      const wasteForeign = await ctxAx.post("/api/waste", {
+        data: { batchId: F.batchB, farmId: F.farmA, wasteType: "DAMAGED", quantity: 1, reason: "E2E poison waste" },
+      });
+      expect(wasteForeign.status()).toBe(403);
+
+      // 6) Client-supplied farmId is always re-stamped to the caller's farm
+      const poSmuggle = await ctxAx.post("/api/purchase-orders", {
+        data: {
+          supplierId: F.supplierId,
+          farmId: F.farmB,
+          items: [{ itemId: F.itemA, quantity: 1, unitPrice: 1 }],
+          notes: "E2E farmid smuggle probe",
+        },
+      });
+      expect(poSmuggle.status()).toBe(201);
+      expect((await poSmuggle.json()).farmId).toBe(F.farmA);
+
+      const reqSmuggle = await ctxAx.post("/api/requests", {
+        data: { farmId: F.farmB, itemId: F.itemA, quantity: 1, unitOfMeasure: "bags", purpose: "E2E farmid smuggle probe" },
+      });
+      expect(reqSmuggle.status()).toBe(201);
+      expect((await reqSmuggle.json()).farmId).toBe(F.farmA);
+
+      const whSmuggle = await ctxAx.post("/api/warehouses", {
+        data: { name: `E2E-A PROBE ${Date.now()}`, farmId: F.farmB, location: "smuggle probe" },
+      });
+      expect(whSmuggle.status()).toBe(201);
+      expect((await whSmuggle.json()).farmId).toBe(F.farmA);
+    } finally {
+      await ctxAx.dispose().catch(() => undefined);
+    }
+  });
+
+  test("a poisoned cross-farm request cannot drain Farm B stock on approval", async () => {
+    // The fixture row is Farm A's own request (ownership check passes) but
+    // points at Farm B's warehouse + item — the exact shape the create-route
+    // used to accept. The fulfilment lookup must refuse to move Farm B stock.
+    const before = await ctxB.get(`/api/batches?warehouseId=${F.warehouseB}`);
+    expect(before.status()).toBe(200);
+    const beforeRows = (await before.json()) as { id: string; quantityRemaining: number }[];
+    const beforeQty = beforeRows.find((b) => b.id === F.batchB)?.quantityRemaining;
+    expect(beforeQty, "Farm B batch fixture must exist").toBeGreaterThan(0);
+
+    const approve = await ctxA.patch(`/api/requests/${F.poisonRequestA}`, {
+      data: { status: "APPROVED" },
+    });
+    expect(approve.status()).toBe(200);
+
+    const after = await ctxB.get(`/api/batches?warehouseId=${F.warehouseB}`);
+    const afterRows = (await after.json()) as { id: string; quantityRemaining: number }[];
+    const afterQty = afterRows.find((b) => b.id === F.batchB)?.quantityRemaining;
+    expect(afterQty, "Farm B stock must be unchanged by Farm A's approval").toBe(beforeQty);
+  });
+
+  test("receiving a cross-farm purchase order cannot credit Farm B's batch", async () => {
+    // Items are a shared catalog. Farm A orders the shared item whose only
+    // ACTIVE batch belongs to Farm B; on RECEIVED the batch lookup must stay
+    // inside Farm A's warehouses. Regression: the lookup was unscoped, so
+    // receipt credited Farm B's ACTIVE batch. (Uses the marker-free shared
+    // item so Farm A's own PO/batch lists stay free of E2E-B markers.)
+    const before = await ctxB.get(`/api/batches?warehouseId=${F.warehouseB}`);
+    expect(before.status()).toBe(200);
+    const beforeRows = (await before.json()) as { id: string; quantityRemaining: number }[];
+    const beforeQty = beforeRows.find((b) => b.id === F.sharedBatchB)?.quantityRemaining;
+    expect(beforeQty, "Farm B shared batch fixture must exist").toBeGreaterThan(0);
+
+    const ctxAx = await apiFor(baseURL, EMAIL.managerA);
+    try {
+      const created = await ctxAx.post("/api/purchase-orders", {
+        data: {
+          supplierId: F.supplierId,
+          farmId: F.farmA,
+          items: [{ itemId: F.sharedItem, quantity: 7, unitPrice: 1 }],
+          notes: "E2E cross-farm receipt probe",
+        },
+      });
+      expect(created.status()).toBe(201);
+      const { id } = (await created.json()) as { id: string };
+
+      type FarmBatchRow = { quantity: number; warehouse: { farmId: string } };
+      const sumOwn = async () => {
+        const res = await ctxAx.get(`/api/batches?itemId=${F.sharedItem}`);
+        expect(res.status()).toBe(200);
+        const rows = (await res.json()) as FarmBatchRow[];
+        // Positive control part 1: every batch Farm A can see for this
+        // item must live in Farm A's own scope.
+        for (const row of rows) {
+          expect(row.warehouse.farmId).toBe(F.farmA);
+        }
+        return rows.reduce((sum, row) => sum + row.quantity, 0);
+      };
+      const ownBefore = await sumOwn();
+
+      const receive = await ctxAx.patch(`/api/purchase-orders/${id}`, {
+        data: { status: "RECEIVED" },
+      });
+      expect(receive.status()).toBe(200);
+
+      // Farm B's stock must be untouched by Farm A's receipt
+      const after = await ctxB.get(`/api/batches?warehouseId=${F.warehouseB}`);
+      const afterRows = (await after.json()) as { id: string; quantityRemaining: number }[];
+      const afterQty = afterRows.find((b) => b.id === F.sharedBatchB)?.quantityRemaining;
+      expect(afterQty, "Farm B stock must be unchanged by Farm A's receipt").toBe(beforeQty);
+
+      // Positive control part 2: the received stock landed on Farm A's own
+      // scope (a new batch, or an existing Farm A batch credited in place)
+      // instead of silently vanishing or landing on Farm B.
+      const ownAfter = await sumOwn();
+      expect(ownAfter, "Farm A must receive its own stock on receipt").toBe(ownBefore + 7);
+    } finally {
+      await ctxAx.dispose().catch(() => undefined);
+    }
+  });
+
+  test("QR lookup and CSV import cannot reach Farm B data", async () => {
+    const ctxAx = await apiFor(baseURL, EMAIL.managerA);
+    try {
+      // QR scan by Farm B's batch number → not found, no metadata
+      const scan = await ctxAx.get("/api/qr?code=E2E-B-BATCH-1");
+      expect(scan.status()).toBe(404);
+      expect(await scan.text()).not.toContain(MARK_B);
+
+      // CSV import referencing Farm B's batch number → row skipped, nothing created
+      const csv = [
+        "Type,Batch Number,Quantity,Reason",
+        "ISSUED,E2E-B-BATCH-1,5,E2E poison import",
+      ].join("\n");
+      const res = await ctxAx.post("/api/import", {
+        multipart: {
+          file: { name: "poison.csv", mimeType: "text/csv", buffer: Buffer.from(csv) },
+          type: "transactions",
+        },
+      });
+      expect(res.status()).toBe(200);
+      const body = (await res.json()) as { created: number; skipped: number; errors: string[] };
+      expect(body.created).toBe(0);
+      expect(body.skipped).toBe(1);
+      expect(JSON.stringify(body.errors)).toContain("not found");
+    } finally {
+      await ctxAx.dispose().catch(() => undefined);
+    }
+  });
+
+  test("legitimate same-tenant workflows still succeed", async () => {
+    const ctxAx = await apiFor(baseURL, EMAIL.managerA);
+    try {
+      // Reads by ID inside one's own farm
+      const ownCount = await ctxAx.get(`/api/stock-count/${F.stockCountA}`);
+      expect(ownCount.status()).toBe(200);
+      expect(await ownCount.text()).toContain("E2E-A count");
+
+      const ownTx = await ctxAx.get(`/api/transactions/${F.txA}`);
+      expect(ownTx.status()).toBe(200);
+
+      // Create flows still accept legitimate input after the new guards
+      const ownReq = await ctxAx.post("/api/requests", {
+        data: { farmId: F.farmA, warehouseId: F.warehouseA, itemId: F.itemA, quantity: 2, unitOfMeasure: "bags", purpose: "E2E same-tenant control" },
+      });
+      expect(ownReq.status()).toBe(201);
+      expect((await ownReq.json()).farmId).toBe(F.farmA);
+
+      const ownQr = await ctxAx.post("/api/qr", { data: { batchId: F.batchA } });
+      expect(ownQr.status()).toBe(200);
+      expect((await ownQr.json()).batchNumber).toBe("E2E-A-BATCH-1");
+
+      // Owner-scoped notification update
+      const ownNotif = await ctxAx.patch(`/api/notifications/${F.notificationA}`, {
+        data: { isRead: true },
+      });
+      expect(ownNotif.status()).toBe(200);
+
+      // Farm A may edit its own farm record
+      const ownFarm = await ctxAx.patch(`/api/farms/${F.farmA}`, {
+        data: { description: "E2E same-tenant control" },
+      });
+      expect(ownFarm.status()).toBe(200);
+    } finally {
+      await ctxAx.dispose().catch(() => undefined);
+    }
+  });
+
+  test("the webhook registry is never readable without a session", async () => {
+    const anon = await anonApiFor(baseURL);
+    const ctxAdmin2 = await apiFor(baseURL, EMAIL.admin);
+    const ctxWorker2 = await apiFor(baseURL, EMAIL.workerA);
+    try {
+      const created = await ctxAdmin2.post("/api/webhooks", {
+        data: { url: "https://example.com/farmops-e2e", events: ["*"] },
+      });
+      expect(created.status()).toBe(201);
+      const { id } = (await created.json()) as { id: string };
+
+      // Regression: this GET previously had no authentication at all
+      const unauth = await anon.get(`/api/webhooks/${id}`);
+      expect(unauth.status()).toBe(401);
+
+      // Authenticated users match the list route's floor
+      const workerRead = await ctxWorker2.get(`/api/webhooks/${id}`);
+      expect(workerRead.status()).toBe(200);
+
+      // Non-admins still cannot modify or remove webhooks
+      const workerPatch = await ctxWorker2.patch(`/api/webhooks/${id}`, {
+        data: { isActive: false },
+      });
+      expect(workerPatch.status()).toBe(403);
+      const workerDelete = await ctxWorker2.delete(`/api/webhooks/${id}`);
+      expect(workerDelete.status()).toBe(403);
+
+      // Cleanup (admin only)
+      const removed = await ctxAdmin2.delete(`/api/webhooks/${id}`);
+      expect(removed.status()).toBe(200);
+    } finally {
+      await Promise.all(
+        [anon.dispose(), ctxAdmin2.dispose(), ctxWorker2.dispose()].map((p) =>
+          p.catch(() => undefined)
+        )
+      );
+    }
+  });
+
+  test("farm-pinned API keys can never read across tenants", async () => {
+    const ctxAdmin2 = await apiFor(baseURL, EMAIL.admin);
+    try {
+      const created = await ctxAdmin2.post("/api/api-keys", {
+        data: {
+          name: `E2E pinned ${Date.now()}`,
+          permissions: ["read:inventory", "read:transactions"],
+          farmId: F.farmA,
+        },
+      });
+      expect(created.status()).toBe(201);
+      const { key } = (await created.json()) as { key: string };
+      expect(key.startsWith("fops_")).toBe(true);
+
+      // External API auth is key-only — no session, no Origin needed
+      const external = await anonApiFor(baseURL);
+      try {
+        const inv = await external.get("/api/external/inventory?limit=100", {
+          headers: { Authorization: `Bearer ${key}` },
+        });
+        expect(inv.status()).toBe(200);
+        const invBody = await inv.text();
+        expect(invBody, "pinned key must include Farm A stock").toContain("E2E-A-BATCH-1");
+        expect(invBody).not.toContain("E2E-B-BATCH-1");
+        expect(invBody).not.toContain("E2E-B Warehouse");
+
+        // Requesting Farm B explicitly must be ignored — the key is pinned to A
+        const tx = await external.get(`/api/external/transactions?farmId=${F.farmB}&limit=100`, {
+          headers: { Authorization: `Bearer ${key}` },
+        });
+        expect(tx.status()).toBe(200);
+        const txBody = await tx.text();
+        expect(txBody).not.toContain(MARK_B);
+        expect(txBody).not.toContain("E2E-B-BATCH-1");
+      } finally {
+        await external.dispose().catch(() => undefined);
+      }
+    } finally {
+      await ctxAdmin2.dispose().catch(() => undefined);
+    }
   });
 });

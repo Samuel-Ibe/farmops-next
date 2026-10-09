@@ -20,7 +20,7 @@ Measured on `master`, not estimated. The badge above reflects all **six** CI che
 | TypeScript | `strict: true`, **0 errors** | `tsc --noEmit` |
 | ESLint | **0 errors**, 2 warnings (budget `--max-warnings 10`) — hard CI gate | `eslint .` |
 | Unit tests | **176 passing** (15 suites — incl. 93 adversarial security tests and 7 real-PostgreSQL concurrency/rollback/invariant tests) | Vitest |
-| E2E tests | **35 passing** — 13 route-level tenant-isolation attack scenarios, 17 API contract checks, 5 auth/UI | Playwright |
+| E2E tests | **43 passing** — 21 route-level tenant-isolation attack scenarios, 17 API contract checks, 5 auth/UI | Playwright |
 | Branch coverage, `src/lib` | **92.5%** | `vitest --coverage` |
 | Critical vulnerabilities, production deps | **0** | `pnpm audit --prod` |
 | High vulnerabilities, production deps | **0** (2 moderate accepted — see [security.md](docs/security.md)) | `pnpm audit --prod` |

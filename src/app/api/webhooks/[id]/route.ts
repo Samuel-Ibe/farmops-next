@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getWebhook, updateWebhook, unregisterWebhook, getDeliveryLogs } from "@/lib/webhooks";
-import { mutationGuard } from "@/lib/api-auth";
+import { mutationGuard, requireAuth } from "@/lib/api-auth";
 import { validate, updateWebhookSchema } from "@/lib/api-validations";
 
 /**
@@ -12,6 +12,12 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Registered webhooks expose integration target URLs and delivery logs —
+    // read access requires a session, matching the list route (this handler
+    // previously had no guard at all; tenant-isolation E2E regression).
+    const user = await requireAuth();
+    if (user instanceof NextResponse) return user;
+
     const { id } = await params;
     const webhook = getWebhook(id);
     if (!webhook) {

@@ -46,10 +46,13 @@ export async function PATCH(
 
       for (const poItem of poItems) {
         // Find existing batch for this item in any warehouse for this farm
+        // (warehouse scope is required: items are a shared cross-farm catalog,
+        // so an unscoped lookup could credit another farm's batch on receipt)
         const existingBatch = await prisma.inventoryBatch.findFirst({
           where: {
             itemId: poItem.itemId,
             status: "ACTIVE",
+            warehouse: { farmId: po.farmId },
           },
         });
 

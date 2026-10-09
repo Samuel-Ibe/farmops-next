@@ -57,6 +57,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No farm assigned to your account" }, { status: 400 });
     }
 
+    // Ownership: a request may only point at a warehouse in the caller's own
+    // farm. Without this check an approval would issue stock from the foreign
+    // warehouse named in the body (tenant-isolation E2E regression).
+    if (warehouseId) {
+      const farmScope = resolveFarmScope(user);
+      const warehouse = await prisma.warehouse.findFirst({
+        where: {
+          id: warehouseId,
+          ...(farmScope !== null ? { farmId: farmScope } : {}),
+        },
+        select: { id: true },
+      });
+      if (!warehouse) {
+        return NextResponse.json({ error: "Warehouse not found" }, { status: 404 });
+      }
+    }
+
     const count = await prisma.resourceRequest.count();
     const now = new Date();
     const requestNumber = `REQ-${now.getFullYear().toString().slice(-2)}${(now.getMonth() + 1).toString().padStart(2, "0")}-${(count + 1).toString().padStart(4, "0")}`;

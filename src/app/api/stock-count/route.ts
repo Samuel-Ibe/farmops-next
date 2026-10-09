@@ -52,6 +52,20 @@ export async function POST(request: Request) {
     if (!warehouse) {
       return NextResponse.json({ error: "Warehouse not found" }, { status: 404 });
     }
+    // Ownership: every counted batch must belong to the counted warehouse —
+    // otherwise a RECONCILED variance would apply stock deltas to a foreign
+    // farm's batch referenced from the items array (tenant-isolation E2E
+    // regression).
+    const batchIds = items.map((item) => item.batchId);
+    const ownedBatchCount = await prisma.inventoryBatch.count({
+      where: { id: { in: batchIds }, warehouseId: warehouse.id },
+    });
+    if (ownedBatchCount !== new Set(batchIds).size) {
+      return NextResponse.json(
+        { error: "One or more batches do not belong to the selected warehouse" },
+        { status: 400 }
+      );
+    }
     const stockCount = await prisma.stockCount.create({
       data: {
         warehouseId, countedById: user.id, countDate: new Date(),

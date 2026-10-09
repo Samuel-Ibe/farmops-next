@@ -156,9 +156,15 @@ export async function POST(request: Request) {
           }
 
           // Find batch — scoped to the importer's farm so a CSV can never
-          // reference another tenant's stock by batch number
+          // reference another tenant's stock by batch number. InventoryBatch
+          // has no farmId column of its own; the tenant boundary is its
+          // warehouse's farm (spreading scopeFilter here made every
+          // farm-scoped import throw an unknown-argument error per row).
           const batch = await prisma.inventoryBatch.findFirst({
-            where: { batchNumber, ...scopeFilter, ...(farmScope ? { warehouse: { farmId: farmScope } } : {}) },
+            where: {
+              batchNumber,
+              ...(farmScope ? { warehouse: { farmId: farmScope } } : {}),
+            },
             include: { warehouse: true },
           });
           if (!batch) {

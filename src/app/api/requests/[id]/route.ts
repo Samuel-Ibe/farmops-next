@@ -58,10 +58,14 @@ export async function PATCH(
     // approval is not recorded.
     const outcome = await prisma.$transaction(async (tx) => {
       if (status === "APPROVED" && existing.warehouseId) {
+        // The fulfilment batch must live in a warehouse of the request's own
+        // farm — a legacy row carrying a foreign warehouseId can never drain
+        // another tenant's stock (tenant-isolation E2E regression).
         const batch = await tx.inventoryBatch.findFirst({
           where: {
             itemId: existing.itemId,
             warehouseId: existing.warehouseId,
+            warehouse: { farmId: existing.farmId },
             status: "ACTIVE",
             quantityRemaining: { gte: approvedQuantity || existing.quantity },
           },

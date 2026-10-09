@@ -148,9 +148,15 @@ export async function POST(request: Request) {
     }
     const { batchId } = validation.data;
 
-    // Generate QR code data for a batch
-    const batch = await prisma.inventoryBatch.findUnique({
-      where: { id: batchId },
+    // Generate QR code data for a batch — scoped to the caller's farm so a
+    // foreign batchId can never read another tenant's batch metadata or have
+    // qrCodeData written onto it (tenant-isolation E2E regression).
+    const farmScope = resolveFarmScope(guard);
+    const batch = await prisma.inventoryBatch.findFirst({
+      where: {
+        id: batchId,
+        ...(farmScope !== null ? { warehouse: { farmId: farmScope } } : {}),
+      },
       include: { item: true },
     });
 

@@ -57,6 +57,21 @@ export async function POST(request: Request) {
       purchaseDate,
     } = validation.data;
 
+    // Ownership: non-admins may only receive stock into a warehouse of their
+    // own farm — a foreign warehouseId must never create batches or credit
+    // another tenant's stock (tenant-isolation E2E regression).
+    const batchFarmScope = resolveFarmScope(guard);
+    const warehouse = await prisma.warehouse.findFirst({
+      where: {
+        id: warehouseId,
+        ...(batchFarmScope !== null ? { farmId: batchFarmScope } : {}),
+      },
+      select: { id: true },
+    });
+    if (!warehouse) {
+      return NextResponse.json({ error: "Warehouse not found" }, { status: 404 });
+    }
+
     // Check for duplicate batch number
     const existing = await prisma.inventoryBatch.findFirst({
       where: { batchNumber },
