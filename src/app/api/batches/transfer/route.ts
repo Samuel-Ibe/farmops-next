@@ -195,7 +195,7 @@ export async function POST(request: Request) {
       },
       { status: 201 }
     );
-    });
+    }, validation.data);
   } catch (error) {
     logRouteError(request, "Error transferring stock", error);
     return NextResponse.json(

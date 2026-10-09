@@ -142,7 +142,7 @@ export async function POST(request: Request) {
       await writeAuditLog({ userId: user.id, action: "CREATE", entity: "StockTransaction", entityId: outcome.transaction.id, newValues: { type, batchId, quantity }, ipAddress: getClientIp(request) });
 
       return NextResponse.json(outcome.transaction, { status: 201 });
-    });
+    }, validation.data);
   } catch (error) {
     logRouteError(request, "Error creating transaction", error);
     return NextResponse.json({ error: "Failed to create transaction" }, { status: 500 });

@@ -130,7 +130,7 @@ export async function PATCH(
     });
 
     return NextResponse.json(resourceRequest);
-    });
+    }, validation.data);
   } catch (error) {
     logRouteError(request, "Error updating request", error);
     return NextResponse.json({ error: "Failed to update request" }, { status: 500 });

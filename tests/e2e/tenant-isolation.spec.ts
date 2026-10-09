@@ -81,14 +81,17 @@ test.describe.serial("Tenant isolation — Farm A vs Farm B", () => {
     // poisoned regression row, whose *item* is the shared catalog entry for
     // Farm B's item (the one documented exception — /api/inventory shows it
     // too). Batch numbers and warehouse names stay banned everywhere.
+    // Paginated lists are fetched with an explicit limit so repeated local
+    // runs (which accumulate probe rows) can never push a fixture marker
+    // off page 1 and turn this scan into a false alarm.
     const endpoints: { path: string; mustContain?: string; allowSharedCatalogName?: boolean }[] = [
       { path: "/api/warehouses", mustContain: "E2E-A Warehouse" },
       { path: "/api/transactions?limit=100", mustContain: "E2E-A-BATCH-1" },
-      { path: "/api/requests", mustContain: "E2E-A-REQ-1", allowSharedCatalogName: true },
-      { path: "/api/purchase-orders", mustContain: "E2E-A-PO-1" },
+      { path: "/api/requests?limit=100", mustContain: "E2E-A-REQ-1", allowSharedCatalogName: true },
+      { path: "/api/purchase-orders?limit=100", mustContain: "E2E-A-PO-1" },
       { path: "/api/seasons", mustContain: "E2E-A Season" },
-      { path: "/api/waste", mustContain: "E2E-A waste" },
-      { path: "/api/stock-count", mustContain: "E2E-A count" },
+      { path: "/api/waste?limit=100", mustContain: "E2E-A waste" },
+      { path: "/api/stock-count?limit=100", mustContain: "E2E-A count" },
       { path: "/api/batches", mustContain: "E2E-A-BATCH-1" },
       { path: "/api/farms", mustContain: "E2E Farm Alpha" },
       { path: "/api/alerts?type=all" },

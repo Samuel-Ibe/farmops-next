@@ -74,7 +74,7 @@ export async function POST(request: Request) {
     await writeAuditLog({ userId: user.id, action: "CREATE", entity: "PurchaseOrder", entityId: order.id, newValues: { orderNumber, totalAmount }, ipAddress: getClientIp(request) });
 
     return NextResponse.json(order, { status: 201 });
-    });
+    }, validation.data);
   } catch (error) {
     logRouteError(request, "Error creating purchase order", error);
     return NextResponse.json({ error: "Failed to create purchase order" }, { status: 500 });

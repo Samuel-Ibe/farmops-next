@@ -36,65 +36,82 @@ export async function PATCH(
     if (notes !== undefined) updateData.notes = notes;
     if (actualDeliveryDate) updateData.actualDeliveryDate = new Date(actualDeliveryDate);
 
-    // If received, create stock entries for each PO item
-    if (status === "RECEIVED" && po.status !== "RECEIVED") {
-      updateData.actualDeliveryDate = updateData.actualDeliveryDate || new Date();
-      
-      const poItems = await prisma.purchaseOrderItem.findMany({
-        where: { purchaseOrderId: id },
-      });
+    // Receipt is one atomic unit: every per-item stock credit, the PO-item
+    // received quantities and the status flip must succeed or roll back
+    // together. A mid-loop failure previously left credited batches and
+    // half-received items on a PO that stayed DRAFT — and a retry then
+    // double-credited the items that had succeeded (Phase 2 regression:
+    // tests/e2e/concurrency.spec.ts S10).
+    const updated = await prisma.$transaction(async (tx) => {
+      if (status === "RECEIVED" && po.status !== "RECEIVED") {
+        updateData.actualDeliveryDate = updateData.actualDeliveryDate || new Date();
 
-      for (const poItem of poItems) {
-        // Find existing batch for this item in any warehouse for this farm
-        // (warehouse scope is required: items are a shared cross-farm catalog,
-        // so an unscoped lookup could credit another farm's batch on receipt)
-        const existingBatch = await prisma.inventoryBatch.findFirst({
-          where: {
-            itemId: poItem.itemId,
-            status: "ACTIVE",
-            warehouse: { farmId: po.farmId },
-          },
+        const poItems = await tx.purchaseOrderItem.findMany({
+          where: { purchaseOrderId: id },
         });
 
-        if (existingBatch) {
-          // Update existing batch
-          await prisma.inventoryBatch.update({
-            where: { id: existingBatch.id },
-            data: {
-              quantity: existingBatch.quantity + poItem.quantity,
-              quantityRemaining: existingBatch.quantityRemaining + poItem.quantity,
+        for (const poItem of poItems) {
+          // Find existing batch for this item in any warehouse for this farm
+          // (warehouse scope is required: items are a shared cross-farm catalog,
+          // so an unscoped lookup could credit another farm's batch on receipt)
+          const existingBatch = await tx.inventoryBatch.findFirst({
+            where: {
+              itemId: poItem.itemId,
+              status: "ACTIVE",
+              warehouse: { farmId: po.farmId },
             },
           });
-        } else {
-          // Create new batch
-          await prisma.inventoryBatch.create({
-            data: {
-              itemId: poItem.itemId,
-              batchNumber: `PO-${po.orderNumber}-${poItem.id.slice(-6)}`,
-              supplierId: po.supplierId,
-              purchasePrice: poItem.unitPrice,
-              quantity: poItem.quantity,
-              quantityRemaining: poItem.quantity,
-              warehouseId: (await prisma.warehouse.findFirst({ where: { farmId: po.farmId } }))?.id || "",
-              status: "ACTIVE",
-              purchaseDate: new Date(),
-              notes: `Received from PO ${po.orderNumber}`,
-            },
+
+          if (existingBatch) {
+            // Update existing batch
+            await tx.inventoryBatch.update({
+              where: { id: existingBatch.id },
+              data: {
+                quantity: existingBatch.quantity + poItem.quantity,
+                quantityRemaining: existingBatch.quantityRemaining + poItem.quantity,
+              },
+            });
+          } else {
+            // Create new batch — the receiving farm must have a warehouse;
+            // throwing inside the transaction rolls the whole receipt back
+            // instead of attempting an invalid empty warehouseId.
+            const receivingWarehouse = await tx.warehouse.findFirst({
+              where: { farmId: po.farmId },
+            });
+            if (!receivingWarehouse) {
+              throw new Error(
+                `Cannot receive PO ${po.orderNumber}: farm ${po.farmId} has no warehouse`
+              );
+            }
+            await tx.inventoryBatch.create({
+              data: {
+                itemId: poItem.itemId,
+                batchNumber: `PO-${po.orderNumber}-${poItem.id.slice(-6)}`,
+                supplierId: po.supplierId,
+                purchasePrice: poItem.unitPrice,
+                quantity: poItem.quantity,
+                quantityRemaining: poItem.quantity,
+                warehouseId: receivingWarehouse.id,
+                status: "ACTIVE",
+                purchaseDate: new Date(),
+                notes: `Received from PO ${po.orderNumber}`,
+              },
+            });
+          }
+
+          // Mark PO item as fully received
+          await tx.purchaseOrderItem.update({
+            where: { id: poItem.id },
+            data: { quantityReceived: poItem.quantity },
           });
         }
-
-        // Mark PO item as fully received
-        await prisma.purchaseOrderItem.update({
-          where: { id: poItem.id },
-          data: { quantityReceived: poItem.quantity },
-        });
       }
-    }
 
-    const updated = await prisma.purchaseOrder.update({
-      where: { id },
-      data: updateData,
-      include: { items: { include: { item: true } }, supplier: true, farm: true },
+      return tx.purchaseOrder.update({
+        where: { id },
+        data: updateData,
+        include: { items: { include: { item: true } }, supplier: true, farm: true },
+      });
     });
 
     // Audit log

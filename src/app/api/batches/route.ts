@@ -84,38 +84,47 @@ export async function POST(request: Request) {
       );
     }
 
-    const batch = await prisma.inventoryBatch.create({
-      data: {
-        itemId,
-        batchNumber,
-        warehouseId,
-        supplierId: supplierId || null,
-        quantity: quantityReceived,
-        quantityRemaining: quantityReceived,
-        purchasePrice: purchasePrice || 0,
-        manufacturedDate: manufactureDate ? new Date(manufactureDate) : null,
-        expiryDate: expiryDate ? new Date(expiryDate) : null,
-        purchaseDate: purchaseDate ? new Date(purchaseDate) : new Date(),
-      },
-      include: {
-        item: true,
-        warehouse: true,
-        supplier: true,
-      },
-    });
+    // The batch and its RECEIVED ledger row are one atomic unit: a ledger
+    // failure must never leave an orphaned batch (and a consumed batch
+    // number) behind. The ledger row is attributed to the actual actor — a
+    // hardcoded "system" user id violates the performedById foreign key and
+    // used to 500 AFTER the batch had already been committed.
+    const batch = await prisma.$transaction(async (tx) => {
+      const created = await tx.inventoryBatch.create({
+        data: {
+          itemId,
+          batchNumber,
+          warehouseId,
+          supplierId: supplierId || null,
+          quantity: quantityReceived,
+          quantityRemaining: quantityReceived,
+          purchasePrice: purchasePrice || 0,
+          manufacturedDate: manufactureDate ? new Date(manufactureDate) : null,
+          expiryDate: expiryDate ? new Date(expiryDate) : null,
+          purchaseDate: purchaseDate ? new Date(purchaseDate) : new Date(),
+        },
+        include: {
+          item: true,
+          warehouse: true,
+          supplier: true,
+        },
+      });
 
-    // Create a RECEIVED transaction
-    await prisma.stockTransaction.create({
-      data: {
-        type: "RECEIVED",
-        batchId: batch.id,
-        toWarehouseId: warehouseId,
-        performedById: "system",
-        quantity: quantityReceived,
-        unitCost: purchasePrice || 0,
-        totalValue: (purchasePrice || 0) * quantityReceived,
-        reason: `Initial batch receipt: ${batchNumber}`,
-      },
+      await tx.stockTransaction.create({
+        data: {
+          type: "RECEIVED",
+          batchId: created.id,
+          toWarehouseId: warehouseId,
+          performedById: guard.id,
+          farmId: guard.role === "ADMIN" ? undefined : guard.farmId || undefined,
+          quantity: quantityReceived,
+          unitCost: purchasePrice || 0,
+          totalValue: (purchasePrice || 0) * quantityReceived,
+          reason: `Initial batch receipt: ${batchNumber}`,
+        },
+      });
+
+      return created;
     });
 
     return NextResponse.json(batch, { status: 201 });

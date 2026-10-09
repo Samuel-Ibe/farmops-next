@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createHash } from "crypto";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -142,22 +143,45 @@ export function csrfErrorResponse(): NextResponse {
 
 // ─── Idempotency ────────────────────────────────────────────
 
+/** Order-independent fingerprint of a request payload (sorted keys). */
+function stableStringify(value: unknown): string {
+  if (value === undefined) return "null";
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(",")}]`;
+  }
+  const obj = value as Record<string, unknown>;
+  return `{${Object.keys(obj)
+    .sort()
+    .map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`)
+    .join(",")}}`;
+}
+
+function payloadFingerprint(payload: unknown): string {
+  if (payload === undefined) return "unbound";
+  return createHash("sha256").update(stableStringify(payload)).digest("hex");
+}
+
 /**
  * Run a mutation at most once per `Idempotency-Key` header value.
  *
  * - No header → handler runs normally (idempotency is opt-in).
- * - Duplicate key → the stored successful response is replayed with
- *   `Idempotent-Replay: true`.
+ * - Duplicate key (same payload) → the stored successful response is
+ *   replayed with `Idempotent-Replay: true`.
  * - Concurrent duplicate → 409 while the original request is in flight.
+ * - Same key with a DIFFERENT payload → 409; never a silent replay of the
+ *   other payload's success.
  * - Non-2xx / thrown → the key is released so a corrected retry can run.
  *
  * `scope` should identify the route and the acting user, so two users (or two
- * endpoints) can never share a key's recorded response.
+ * endpoints) can never share a key's recorded response. Callers should pass
+ * the validated request body as `payload` so the key binds to it.
  */
 export async function withIdempotency(
   request: Request,
   scope: string,
-  handler: () => Promise<NextResponse>
+  handler: () => Promise<NextResponse>,
+  payload?: unknown
 ): Promise<NextResponse> {
   const rawKey = request.headers.get("idempotency-key");
   if (!rawKey) return handler();
@@ -171,8 +195,14 @@ export async function withIdempotency(
   }
 
   const scopeKey = `${scope}:${key}`;
-  const check = beginIdempotency(scopeKey);
+  const check = beginIdempotency(scopeKey, payloadFingerprint(payload));
 
+  if (check.outcome === "mismatch") {
+    return NextResponse.json(
+      { error: "Idempotency-Key was previously used with a different payload" },
+      { status: 409 }
+    );
+  }
   if (check.outcome === "inflight") {
     return NextResponse.json(
       { error: "A request with this Idempotency-Key is already in progress" },

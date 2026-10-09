@@ -7,7 +7,10 @@
  * stored under the key. Any duplicate — browser double-click, network retry,
  * client retry logic — replays the stored response instead of performing a
  * second operation. Failed (non-2xx) attempts release the key so a corrected
- * retry can run.
+ * retry can run. A key is bound to the fingerprint of the payload it first
+ * executed with: reusing it with a DIFFERENT payload is rejected (409), never
+ * replayed, so a client can never see "success" for a mutation it did not
+ * actually submit.
  *
  * Storage is in-memory and scoped per user + route (same single-instance
  * limitation as rate limiting — see docs/SECURITY_AUDIT.md SEC-18 before
@@ -21,8 +24,8 @@ export interface IdempotencyRecord {
 }
 
 type IdempotencyEntry =
-  | { state: "inflight" }
-  | { state: "done"; record: IdempotencyRecord };
+  | { state: "inflight"; payloadHash: string }
+  | { state: "done"; payloadHash: string; record: IdempotencyRecord };
 
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_ENTRIES = 5000;
@@ -58,14 +61,26 @@ export function isValidIdempotencyKey(key: string): boolean {
 export type IdempotencyCheck =
   | { outcome: "fresh" }
   | { outcome: "inflight" }
-  | { outcome: "replay"; record: IdempotencyRecord };
+  | { outcome: "replay"; record: IdempotencyRecord }
+  /** Key was already used with a DIFFERENT payload — reject, never replay. */
+  | { outcome: "mismatch" };
 
-/** Claim a key for execution, or discover it is already done/in-flight. */
-export function beginIdempotency(scopeKey: string): IdempotencyCheck {
+/**
+ * Claim a key for execution, or discover it is already done/in-flight/
+ * used-with-a-different-payload. A key is bound to the fingerprint of the
+ * payload it first executed with: silently replaying response A to a client
+ * that just submitted mutation B "indicates success" for an operation that
+ * never ran — the contract is one key, one payload, one logical mutation.
+ */
+export function beginIdempotency(
+  scopeKey: string,
+  payloadHash: string
+): IdempotencyCheck {
   const now = Date.now();
   prune(now);
   const existing = store.get(scopeKey);
   if (existing) {
+    if (existing.payloadHash !== payloadHash) return { outcome: "mismatch" };
     if (existing.state === "inflight") return { outcome: "inflight" };
     if (now - existing.record.storedAt > IDEMPOTENCY_TTL_MS) {
       store.delete(scopeKey);
@@ -73,7 +88,7 @@ export function beginIdempotency(scopeKey: string): IdempotencyCheck {
       return { outcome: "replay", record: existing.record };
     }
   }
-  store.set(scopeKey, { state: "inflight" });
+  store.set(scopeKey, { state: "inflight", payloadHash });
   return { outcome: "fresh" };
 }
 
@@ -84,8 +99,10 @@ export function completeIdempotency(
   body: unknown
 ): void {
   if (status >= 200 && status < 300) {
+    const existing = store.get(scopeKey);
     store.set(scopeKey, {
       state: "done",
+      payloadHash: existing?.state === "inflight" ? existing.payloadHash : "",
       record: { status, body, storedAt: Date.now() },
     });
   } else {
