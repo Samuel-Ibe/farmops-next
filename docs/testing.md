@@ -138,7 +138,16 @@ job at *Initialize containers*. Create a Docker Hub
 — never the account password — and add both secrets under
 **Settings → Secrets and variables → Actions**. This lifts the service pulls
 out of Docker Hub's small anonymous per-IP pool, which has failed runs here
-with `toomanyrequests`.
+with `toomanyrequests`. The `docker` job additionally runs `docker/login-action`
+before `docker/build-push-action`, so BuildKit's `FROM node:20-alpine`
+base-image pulls authenticate through the same secrets.
+
+**Credential expiry:** [`dockerhub-credential-check.yml`](../.github/workflows/dockerhub-credential-check.yml)
+runs daily (and on `workflow_dispatch`) and fails — emailing repo watchers —
+if the secrets can no longer mint a registry pull token, so an expired or
+revoked `DOCKERHUB_TOKEN` is reported *before* the next push to `master`
+would fail at *Initialize containers*. It prints only HTTP status codes;
+credential values and minted tokens never reach the log.
 
 **Real-PostgreSQL suite:** set `DB_TEST_DATABASE_URL` to a **disposable**
 database with `prisma migrate deploy` applied (e.g. a `*_e2e` database),

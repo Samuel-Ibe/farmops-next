@@ -31,7 +31,8 @@ npm test           # 138 unit tests
 
 ## Branch & commit style
 
-- Branch: `fix/…`, `feat/…`, `docs/…`, `refactor/…` off `main`.
+- Branch: `fix/…`, `feat/…`, `docs/…`, `refactor/…` off the default branch
+  (`master`).
 - Commits: imperative subject, body explains *why* when it isn't obvious.
   One logical change per commit — don't mix a rename with a behavior change.
 - Don't commit `.env`, `node_modules/`, `public/uploads/`, or generated
@@ -61,6 +62,51 @@ not *“Update route.ts”*.
 
 That checklist mirrors [security/api-security.md](./security/api-security.md)
 §12 — it's the same list the audit used.
+
+## Branch protection & release gates
+
+Verified against the GitHub API on 2026-10-12 — not assumed. Re-run the
+commands after changing any of it and update this section in the same PR.
+
+**Enforcement layer:** a single ruleset, `master-green-ci` (id `24705506`),
+`enforcement: active`, target `branch`. There is **no legacy branch
+protection** on `master` (`GET …/branches/master/protection` → 404) — if the
+ruleset is ever deleted, `master` is wide open.
+
+**Six required status checks** (literal context strings from the ruleset;
+renaming a CI job's `name:` silently breaks the gate for everyone who
+isn't bypassed):
+
+1. `Lint & Type Check`
+2. `Type Coverage`
+3. `Tests (unit + PostgreSQL)`
+4. `Build`
+5. `E2E Tests`
+6. `Docker Build & Smoke Test`
+
+Strict mode is off (no up-to-date-branch requirement) and checks are not
+enforced at PR creation (`do_not_enforce_on_create: true`).
+
+**Bypass:** exactly one actor — the `Samuel-Ibe` account (user id `129095302`),
+`bypass_mode: always`. No team or app bypass exists. Anyone else pushing or
+merging must satisfy all six checks first.
+
+**Other rules:** `deletion` (cannot delete `master`) and `non_fast_forward`
+(no force pushes).
+
+**How changes reach master today:**
+
+- Direct push using the `Samuel-Ibe` credential (always-bypass, so CI runs
+  *after* the push; every push in this project's history has that shape).
+- PR merge (merge, squash, or rebase — all three enabled repo-wide), which
+  requires all six checks green for non-bypass actors.
+
+Verification commands:
+
+```bash
+gh api repos/Samuel-Ibe/farmops-next/rulesets/24705506 --jq '{name, enforcement, bypass_actors, rules}'
+gh api repos/Samuel-Ibe/farmops-next/branches/master/protection   # expect 404
+```
 
 ## Code conventions
 
