@@ -61,14 +61,6 @@ jobs:
     services:
       postgres:
         image: postgres:16-alpine
-        # Authenticated Docker Hub pull when the DOCKERHUB_* secrets exist
-        # (service containers support `credentials` natively). Without the
-        # secrets the runner logs in anonymously — identical to the previous
-        # behavior — so this never blocks CI before the secrets are set.
-        # Token setup: docs/testing.md §CI secrets.
-        credentials:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           POSTGRES_DB: farmops_test
           POSTGRES_USER: farmops
@@ -144,14 +136,6 @@ jobs:
     services:
       postgres:
         image: postgres:16-alpine
-        # Authenticated Docker Hub pull when the DOCKERHUB_* secrets exist
-        # (service containers support `credentials` natively). Without the
-        # secrets the runner logs in anonymously — identical to the previous
-        # behavior — so this never blocks CI before the secrets are set.
-        # Token setup: docs/testing.md §CI secrets.
-        credentials:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           POSTGRES_DB: farmops_test
           POSTGRES_USER: farmops
@@ -220,14 +204,6 @@ jobs:
     services:
       postgres:
         image: postgres:16-alpine
-        # Authenticated Docker Hub pull when the DOCKERHUB_* secrets exist
-        # (service containers support `credentials` natively). Without the
-        # secrets the runner logs in anonymously — identical to the previous
-        # behavior — so this never blocks CI before the secrets are set.
-        # Token setup: docs/testing.md §CI secrets.
-        credentials:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           POSTGRES_DB: farmops_test
           POSTGRES_USER: farmops
