@@ -125,6 +125,18 @@ one back. CI and the Docker build both use `pnpm install --frozen-lockfile`,
 so a `package.json` dependency change must be followed by a lockfile update
 (`pnpm install --lockfile-only`).
 
+**CI secrets (optional — Docker Hub pull limits):** the three jobs that run
+`postgres:16-alpine` as a service container (`test`, `e2e`, `docker`) declare
+`credentials:` sourced from the repository secrets `DOCKERHUB_USERNAME` and
+`DOCKERHUB_TOKEN`. When both secrets are absent the GitHub runner logs in
+anonymously — identical to the pre-hardening behavior — so CI never breaks
+before they exist. To opt in (recommended: Docker Hub's anonymous pool is
+small and shared per runner IP; `toomanyrequests` has already failed runs
+here), create a Docker Hub [access token](https://docs.docker.com/security/for-developers/access-tokens/)
+— never the account password — and add both secrets under
+**Settings → Secrets and variables → Actions**. The runner logs in only for
+`docker.io`; an invalid token fails the job at *Initialize containers*.
+
 **Real-PostgreSQL suite:** set `DB_TEST_DATABASE_URL` to a **disposable**
 database with `prisma migrate deploy` applied (e.g. a `*_e2e` database),
 never your working one. Without it the 7 DB tests skip with a warning.
