@@ -61,6 +61,13 @@ jobs:
     services:
       postgres:
         image: postgres:16-alpine
+        # Authenticated Docker Hub pull; service containers support
+        # `credentials` natively. Precondition: the DOCKERHUB_* secrets
+        # must exist — template validation rejects the empty string an
+        # unset secret evaluates to. Details: docs/testing.md §CI secrets.
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           POSTGRES_DB: farmops_test
           POSTGRES_USER: farmops
@@ -136,6 +143,13 @@ jobs:
     services:
       postgres:
         image: postgres:16-alpine
+        # Authenticated Docker Hub pull; service containers support
+        # `credentials` natively. Precondition: the DOCKERHUB_* secrets
+        # must exist — template validation rejects the empty string an
+        # unset secret evaluates to. Details: docs/testing.md §CI secrets.
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           POSTGRES_DB: farmops_test
           POSTGRES_USER: farmops
@@ -204,6 +218,13 @@ jobs:
     services:
       postgres:
         image: postgres:16-alpine
+        # Authenticated Docker Hub pull; service containers support
+        # `credentials` natively. Precondition: the DOCKERHUB_* secrets
+        # must exist — template validation rejects the empty string an
+        # unset secret evaluates to. Details: docs/testing.md §CI secrets.
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           POSTGRES_DB: farmops_test
           POSTGRES_USER: farmops
