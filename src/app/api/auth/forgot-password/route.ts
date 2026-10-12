@@ -26,6 +26,21 @@ export async function POST(request: Request) {
     }
     const { email } = validation.data;
 
+    // Per-mailbox ceiling: the IP budget above is per-origin, so without
+    // this an attacker rotating source IPs could reset-bomb any account at
+    // will. Counted on every well-formed attempt before the account lookup
+    // — the 429 is identical whether or not the address exists, so it is
+    // not an enumeration oracle. Mirrors the mailbox budgets on
+    // /api/auth/resend-verification and /api/auth/verify-email.
+    const mailboxBudget = checkRateLimit(
+      `forgot-pw:mailbox:${email}`,
+      3,
+      15 * 60 * 1000
+    );
+    if (!mailboxBudget.allowed) {
+      return rateLimitResponse(mailboxBudget.resetAt);
+    }
+
     // Always return success to prevent email enumeration
     const user = await prisma.user.findUnique({
       where: { email },

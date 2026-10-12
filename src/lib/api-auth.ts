@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createHash } from "crypto";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { checkRateLimit, parseForwardedIp } from "@/lib/rate-limit";
 import {
   NO_FARM_MATCH,
   hasMinRole,
@@ -93,11 +93,13 @@ export async function requireMinRole(
 // ─── Request Metadata ───────────────────────────────────────
 
 export function getClientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
-  const realIp = request.headers.get("x-real-ip");
-  if (realIp) return realIp;
-  return "unknown";
+  // Rightmost X-Forwarded-For hop — the one added by our trusted proxy
+  // (see src/lib/rate-limit.ts parseForwardedIp for the threat this
+  // addresses). Falls back to x-real-ip, then "unknown".
+  return parseForwardedIp(
+    request.headers.get("x-forwarded-for"),
+    request.headers.get("x-real-ip")
+  );
 }
 
 export function rateLimitResponse(resetAt: number): NextResponse {

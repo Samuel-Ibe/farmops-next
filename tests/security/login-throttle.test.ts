@@ -6,6 +6,8 @@ import {
   isLoginThrottled,
   recordLoginFailure,
   clearLoginFailures,
+  parseForwardedIp,
+  rateLimitStoreSizes,
 } from "@/lib/rate-limit";
 
 describe("Rate limiting", () => {
@@ -76,5 +78,57 @@ describe("Login throttling (brute force, no lockout DoS)", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("Store eviction (memory-exhaustion guard)", () => {
+  // A fixed-window entry expires logically but a Map never evicts on its
+  // own: an attacker rotating source IPs could otherwise grow the stores
+  // without bound. These assert keys actually leave memory after expiry.
+  beforeEach(() => {
+    resetRateLimits();
+    resetLoginFailures();
+  });
+
+  it("removes expired fixed-window keys from memory", () => {
+    vi.useFakeTimers();
+    try {
+      for (let i = 0; i < 500; i++) checkRateLimit(`rotate:${i}`, 1, 10);
+      expect(rateLimitStoreSizes().windows).toBeGreaterThanOrEqual(500);
+      vi.advanceTimersByTime(61_000);
+      // Any subsequent write may trigger the sweep.
+      checkRateLimit("sweep:trigger", 5, 60_000);
+      expect(rateLimitStoreSizes().windows).toBeLessThanOrEqual(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("removes stale login-failure keys from memory", () => {
+    vi.useFakeTimers();
+    try {
+      for (let i = 0; i < 100; i++) recordLoginFailure(`old:${i}`);
+      expect(rateLimitStoreSizes().logins).toBe(100);
+      vi.advanceTimersByTime(15 * 60 * 1000 + 61_000);
+      recordLoginFailure("fresh:key");
+      expect(rateLimitStoreSizes().logins).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("parseForwardedIp (rightmost trusted hop)", () => {
+  it("ignores client-supplied entries left of the proxy-added hop", () => {
+    expect(parseForwardedIp("6.6.6.6, 10.44.55.66", null)).toBe("10.44.55.66");
+    expect(parseForwardedIp("1.1.1.1, 2.2.2.2, 3.3.3.3", null)).toBe("3.3.3.3");
+  });
+
+  it("handles single hop, real-ip fallback and blank headers", () => {
+    expect(parseForwardedIp("9.9.9.9", null)).toBe("9.9.9.9");
+    expect(parseForwardedIp(null, "5.5.5.5")).toBe("5.5.5.5");
+    expect(parseForwardedIp(" , ", null)).toBe("unknown");
+    expect(parseForwardedIp(null, null)).toBe("unknown");
+    expect(parseForwardedIp("", "  ")).toBe("unknown");
   });
 });
